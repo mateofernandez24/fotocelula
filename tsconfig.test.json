@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    /* Los tests corren en Node (Vitest): pueden leer archivos de test-data. */
+    "types": ["node", "vite/client"]
+  },
+  "include": ["src"],
+  "exclude": []
+}
