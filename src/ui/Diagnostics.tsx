@@ -133,6 +133,14 @@ function CameraTest() {
     const video = videoRef.current
     if (!video || !stream) return
     video.srcObject = stream
+    // Safari iOS no siempre respeta autoPlay con srcObject: hay que llamar a play().
+    // React no refleja `muted` como atributo, así que se fija aquí también.
+    video.muted = true
+    video.play().catch((err: unknown) => {
+      // AbortError: se detuvo la cámara antes de empezar a reproducir.
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      setError(`No se pudo mostrar la cámara: ${err instanceof Error ? err.message : String(err)}`)
+    })
     return () => {
       video.srcObject = null
       for (const track of stream.getTracks()) track.stop()
