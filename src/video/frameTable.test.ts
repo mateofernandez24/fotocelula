@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildFrameTable,
+  decodeStartFor,
   rotationFromMatrix,
   summarizeEditList,
   type ContainerSample,
@@ -117,6 +118,47 @@ describe('buildFrameTable', () => {
     expect(table.samples[0]?.frameIndex).toBeNull()
     expect(table.samples[9]?.frameIndex).toBeNull()
     expect(table.samples[0]?.timestampUs).toBe(Math.round((-20 / 600) * 1e6))
+  })
+})
+
+describe('decodeStartFor', () => {
+  // GOP abierto, orden de decodificación: I0 P3 B1 B2 | I6 B4 B5 P9 B7 B8
+  // (B4 y B5 se muestran antes que I6 pero se decodifican después).
+  const { samples: list } = buildFrameTable(
+    samples([
+      { cts: 0, dts: 0, sync: true },
+      { cts: 30, dts: 10 },
+      { cts: 10, dts: 20 },
+      { cts: 20, dts: 30 },
+      { cts: 60, dts: 40, sync: true },
+      { cts: 40, dts: 50 },
+      { cts: 50, dts: 60 },
+      { cts: 90, dts: 70 },
+      { cts: 70, dts: 80 },
+      { cts: 80, dts: 90 },
+    ]),
+    600,
+    NO_EDIT,
+  )
+
+  it('un fotograma clave empieza en sí mismo', () => {
+    expect(decodeStartFor(list, 0)).toBe(0)
+    expect(decodeStartFor(list, 4)).toBe(4)
+  })
+
+  it('frames del mismo GOP empiezan en su fotograma clave', () => {
+    expect(decodeStartFor(list, 2)).toBe(0)
+    expect(decodeStartFor(list, 7)).toBe(4)
+    expect(decodeStartFor(list, 9)).toBe(4)
+  })
+
+  it('frames B adelantados empiezan en el GOP anterior', () => {
+    expect(decodeStartFor(list, 5)).toBe(0)
+    expect(decodeStartFor(list, 6)).toBe(0)
+  })
+
+  it('rechaza índices fuera de rango', () => {
+    expect(() => decodeStartFor(list, 10)).toThrow(RangeError)
   })
 })
 

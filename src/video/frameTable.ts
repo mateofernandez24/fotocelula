@@ -130,6 +130,22 @@ export function buildFrameTable(
   return { samples: encoded, frames }
 }
 
+/**
+ * Muestra (en orden de decodificación) desde la que hay que empezar a decodificar para
+ * obtener la muestra `sampleIndex`: el último fotograma clave anterior. Si la muestra se
+ * muestra antes que ese fotograma clave (frame B "adelantado" de un GOP abierto), depende
+ * del GOP anterior y hay que empezar en el fotograma clave previo.
+ */
+export function decodeStartFor(samples: readonly EncodedSample[], sampleIndex: number): number {
+  const target = samples[sampleIndex]
+  if (!target) throw new RangeError(`No existe la muestra ${sampleIndex}`)
+  for (let i = sampleIndex; i >= 0; i--) {
+    const sample = samples[i]
+    if (sample?.isKeyframe && sample.timestampUs <= target.timestampUs) return i
+  }
+  throw new RangeError(`No hay ningún fotograma clave antes de la muestra ${sampleIndex}`)
+}
+
 export type Rotation = 0 | 90 | 180 | 270
 
 /**
