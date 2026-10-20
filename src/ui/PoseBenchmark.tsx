@@ -4,7 +4,7 @@ import type { BenchmarkRequest, BenchmarkResponse } from '../pose/benchmark.work
 import type { PoseDelegate, PoseModel } from '../pose/landmarker.ts'
 import { blobByteSource, demuxVideo, VideoFormatError } from '../video/demux.ts'
 import { FrameSource } from '../video/frameSource.ts'
-import { drawRotatedFrame } from './drawFrame.ts'
+import { drawRotatedFrame } from '../video/drawFrame.ts'
 import { formatInteger, formatMs } from './format.ts'
 
 const FRAME_COUNT = 20

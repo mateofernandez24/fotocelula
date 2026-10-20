@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FrameSource } from '../video/frameSource.ts'
-import { drawRotatedFrame } from './drawFrame.ts'
+import { drawRotatedFrame } from '../video/drawFrame.ts'
 import { formatInteger, formatSeconds } from './format.ts'
 
 /** Lado mayor del canvas: suficiente para ver detalle sin gastar memoria con vídeos 4K. */

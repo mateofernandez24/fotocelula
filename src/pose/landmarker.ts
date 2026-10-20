@@ -17,7 +17,7 @@ export interface PoseLandmarkerOptions {
   model: PoseModel
   delegate: PoseDelegate
   /** Variante ES module del WASM, necesaria dentro de un Worker de tipo module. */
-  moduleWasm?: boolean
+  moduleWasm?: boolean | undefined
 }
 
 /**

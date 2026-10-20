@@ -1,4 +1,4 @@
-import type { Rotation } from '../video/frameTable.ts'
+import type { Rotation } from './frameTable.ts'
 
 /**
  * Dibuja un frame decodificado ocupando todo el canvas y aplicando el giro de la pista.
