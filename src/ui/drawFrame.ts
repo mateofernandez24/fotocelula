@@ -5,7 +5,7 @@ import type { Rotation } from '../video/frameTable.ts'
  * El canvas debe tener ya la proporción del vídeo girado (displayWidth × displayHeight).
  */
 export function drawRotatedFrame(
-  ctx: CanvasRenderingContext2D,
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   frame: CanvasImageSource,
   rotation: Rotation,
 ): void {

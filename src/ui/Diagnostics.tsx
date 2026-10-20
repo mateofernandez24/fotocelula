@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { PoseBenchmark } from './PoseBenchmark.tsx'
 
 interface Check {
   label: string
@@ -230,6 +231,7 @@ export function Diagnostics() {
         <p className="user-agent">{navigator.userAgent}</p>
       </section>
       <CameraTest />
+      <PoseBenchmark />
     </>
   )
 }
