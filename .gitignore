@@ -28,3 +28,6 @@ test-data/**/*.[mM][pP]4
 test-data/**/*.[mM][oO][vV]
 test-data/**/*.[mM]4[vV]
 test-data/**/*.[wW][eE][bB][mM]
+
+# WASM de MediaPipe: se copia desde node_modules (scripts/copy-mediapipe.mjs).
+public/mediapipe/
