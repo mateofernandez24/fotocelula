@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildFrameTable,
   decodeStartFor,
+  findFrameByTimestamp,
   rotationFromMatrix,
   summarizeEditList,
   type ContainerSample,
@@ -159,6 +160,29 @@ describe('decodeStartFor', () => {
 
   it('rechaza índices fuera de rango', () => {
     expect(() => decodeStartFor(list, 10)).toThrow(RangeError)
+  })
+})
+
+describe('findFrameByTimestamp', () => {
+  const times = [0, 16667, 33333, 50000, 66667]
+
+  it('coincidencia exacta', () => {
+    expect(findFrameByTimestamp(times, 33333, 0)).toBe(2)
+    expect(findFrameByTimestamp(times, 0, 0)).toBe(0)
+    expect(findFrameByTimestamp(times, 66667, 0)).toBe(4)
+  })
+
+  it('el más cercano dentro de la tolerancia (timestamps redondeados)', () => {
+    expect(findFrameByTimestamp(times, 33334, 100)).toBe(2)
+    expect(findFrameByTimestamp(times, 16000, 1000)).toBe(1)
+    expect(findFrameByTimestamp(times, 49000, 1000)).toBe(3)
+  })
+
+  it('null si no hay ninguno lo bastante cerca', () => {
+    expect(findFrameByTimestamp(times, 25000, 1000)).toBeNull()
+    expect(findFrameByTimestamp(times, -5000, 1000)).toBeNull()
+    expect(findFrameByTimestamp(times, 90000, 1000)).toBeNull()
+    expect(findFrameByTimestamp([], 0, 1000)).toBeNull()
   })
 })
 

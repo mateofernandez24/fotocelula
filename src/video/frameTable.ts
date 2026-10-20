@@ -146,6 +146,39 @@ export function decodeStartFor(samples: readonly EncodedSample[], sampleIndex: n
   throw new RangeError(`No hay ningún fotograma clave antes de la muestra ${sampleIndex}`)
 }
 
+/**
+ * Índice del frame cuyo timestamp (µs) es el más cercano a `timestampUs`, o null si el
+ * más cercano está a más de `toleranceUs`. Sirve para identificar la salida del
+ * decodificador aunque el navegador redondee el timestamp.
+ * @param frameTimestampsUs timestamps de los frames visibles, en orden creciente
+ */
+export function findFrameByTimestamp(
+  frameTimestampsUs: readonly number[],
+  timestampUs: number,
+  toleranceUs: number,
+): number | null {
+  let low = 0
+  let high = frameTimestampsUs.length - 1
+  while (low < high) {
+    const mid = (low + high) >> 1
+    if ((frameTimestampsUs[mid] ?? Infinity) < timestampUs) low = mid + 1
+    else high = mid
+  }
+  // `low` es el primero >= timestampUs; el anterior puede estar más cerca.
+  let best: number | null = null
+  let bestDistance = Infinity
+  for (const index of [low - 1, low]) {
+    const t = frameTimestampsUs[index]
+    if (t === undefined) continue
+    const distance = Math.abs(t - timestampUs)
+    if (distance < bestDistance) {
+      best = index
+      bestDistance = distance
+    }
+  }
+  return bestDistance <= toleranceUs ? best : null
+}
+
 export type Rotation = 0 | 90 | 180 | 270
 
 /**

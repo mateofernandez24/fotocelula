@@ -1,10 +1,33 @@
 // Decodificación de frames concretos con WebCodecs (VideoDecoder).
 // Funciona en el hilo principal y en un Web Worker (no usa el DOM).
 import { VideoFormatError, type ByteSource, type DemuxedVideo } from './demux.ts'
-import { decodeStartFor, type EncodedSample } from './frameTable.ts'
+import {
+  decodeStartFor,
+  findFrameByTimestamp,
+  type EncodedSample,
+  type FrameEntry,
+} from './frameTable.ts'
 
 /** Por encima de esto se leen las muestras una a una en vez de en un único bloque. */
 const MAX_BLOCK_READ = 64 * 1024 * 1024
+/**
+ * Al recorrer el vídeo, máximo de frames "en vuelo": en la cola del decodificador o
+ * esperando a que los procese quien llama. Limita la memoria (un frame 4K ocupa ~12 MB)
+ * y evita que el decodificador se quede sin búferes.
+ */
+const MAX_IN_FLIGHT = 8
+/** Muestras que se leen del archivo de una vez al recorrer el vídeo. */
+const READ_BATCH = 32
+/** Si no llega ninguna salida en este tiempo, se comprueba de nuevo si cabe más entrada. */
+const POLL_MS = 20
+
+export interface ForEachFrameOptions {
+  signal?: AbortSignal
+  /** Primer frame (incluido). Por defecto, 0. */
+  from?: number
+  /** Último frame (excluido). Por defecto, hasta el final. */
+  to?: number
+}
 
 /** Nombre legible del códec para los mensajes al usuario. */
 export function codecLabel(codec: string): string {
@@ -39,11 +62,16 @@ export class FrameSource {
   #queue: Promise<unknown> = Promise.resolve()
   #onOutput: ((frame: VideoFrame) => void) | null = null
   #onError: ((error: DOMException) => void) | null = null
+  /** Timestamp (µs) de cada frame visible, en orden: para identificar las salidas. */
+  readonly #frameTimestampsUs: number[]
 
   private constructor(source: ByteSource, video: DemuxedVideo, config: VideoDecoderConfig) {
     this.#source = source
     this.video = video
     this.#config = config
+    this.#frameTimestampsUs = video.frames.map(
+      (frame) => video.samples[frame.sampleIndex]?.timestampUs ?? Number.NaN,
+    )
   }
 
   /** Comprueba que el navegador sabe decodificar el vídeo antes de crear el decodificador. */
@@ -80,9 +108,125 @@ export class FrameSource {
     return result
   }
 
+  /**
+   * Recorre los frames en orden de presentación, decodificando en secuencia (mucho más
+   * rápido que pedirlos uno a uno con getFrame). Espera a que `onFrame` termine antes de
+   * pasar al siguiente y cierra cada frame después: `onFrame` no debe guardarlo.
+   */
+  forEachFrame(
+    onFrame: (frame: VideoFrame, entry: FrameEntry) => void | Promise<void>,
+    options: ForEachFrameOptions = {},
+  ): Promise<void> {
+    const result = this.#queue.then(() => this.#forEachFrame(onFrame, options))
+    this.#queue = result.catch(() => undefined)
+    return result
+  }
+
   close(): void {
     if (this.#decoder && this.#decoder.state !== 'closed') this.#decoder.close()
     this.#decoder = null
+  }
+
+  async #forEachFrame(
+    onFrame: (frame: VideoFrame, entry: FrameEntry) => void | Promise<void>,
+    { signal, from = 0, to = this.video.frames.length }: ForEachFrameOptions,
+  ): Promise<void> {
+    signal?.throwIfAborted()
+    const { frames, samples } = this.video
+    const first = Math.max(0, from)
+    const last = Math.min(frames.length, to)
+    const firstEntry = frames[first]
+    if (!firstEntry || first >= last) return
+
+    // Muestras a decodificar: desde el fotograma clave del primer frame hasta la última
+    // muestra que produce un frame del rango (con frames B no es la del último frame).
+    const start = decodeStartFor(samples, firstEntry.sampleIndex)
+    let end = start
+    for (let i = first; i < last; i++) end = Math.max(end, (frames[i]?.sampleIndex ?? 0) + 1)
+    const toleranceUs = (this.video.timing.medianIntervalS * 1e6) / 2
+
+    const pending: VideoFrame[] = []
+    const state: { error: unknown; flushed: boolean; wake: (() => void) | null } = {
+      error: null,
+      flushed: false,
+      wake: null,
+    }
+    const notify = () => {
+      state.wake?.()
+      state.wake = null
+    }
+    this.#onOutput = (frame) => {
+      pending.push(frame)
+      notify()
+    }
+    this.#onError = (error) => {
+      state.error = error
+      notify()
+    }
+
+    const decoder = this.#ensureDecoder()
+    let next = start
+    let buffered: EncodedVideoChunk[] = []
+    let flushing = false
+    try {
+      for (;;) {
+        signal?.throwIfAborted()
+        if (state.error) {
+          const reason = state.error instanceof Error ? state.error.message : String(state.error)
+          throw new Error(`No se ha podido decodificar el vídeo: ${reason}`)
+        }
+
+        while (next < end && decoder.decodeQueueSize + pending.length < MAX_IN_FLIGHT) {
+          if (buffered.length === 0) {
+            buffered = await this.#readChunks(next, Math.min(end, next + READ_BATCH))
+          }
+          const chunk = buffered.shift()
+          if (!chunk) break
+          decoder.decode(chunk)
+          next++
+        }
+        if (next >= end && !flushing) {
+          flushing = true
+          decoder.flush().then(
+            () => {
+              state.flushed = true
+              notify()
+            },
+            (error: unknown) => {
+              state.error ??= error
+              notify()
+            },
+          )
+        }
+
+        const frame = pending.shift()
+        if (frame) {
+          try {
+            const index = findFrameByTimestamp(this.#frameTimestampsUs, frame.timestamp, toleranceUs)
+            const entry = index === null ? undefined : frames[index]
+            if (entry && entry.index >= first && entry.index < last) await onFrame(frame, entry)
+          } finally {
+            frame.close()
+          }
+          continue
+        }
+        // flush() se resuelve después de entregar todas las salidas: ya no quedan frames.
+        if (state.flushed) break
+        await new Promise<void>((resolve) => {
+          state.wake = resolve
+          setTimeout(resolve, POLL_MS)
+        })
+      }
+    } catch (error) {
+      // Cancelación, fallo del decodificador o de `onFrame`: se descarta lo que quede en
+      // el decodificador para que la siguiente petición empiece limpia.
+      if (decoder.state === 'configured') decoder.reset()
+      throw error
+    } finally {
+      for (const frame of pending) frame.close()
+      this.#onOutput = null
+      this.#onError = null
+    }
   }
 
   async #decodeFrame(index: number, signal: AbortSignal | undefined): Promise<VideoFrame> {
