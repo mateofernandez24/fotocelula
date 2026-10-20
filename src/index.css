@@ -126,6 +126,59 @@ h2 {
   opacity: 0.6;
 }
 
+/* El canvas del frame marca el tamaño; la capa del torso se superpone exactamente. */
+.viewer-stage {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.viewer .overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  background: transparent;
+  pointer-events: none;
+}
+
+.pose-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--text-h);
+}
+
+.toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.progress {
+  width: 100%;
+  height: 10px;
+  margin: 4px 0 0;
+  accent-color: var(--accent);
+}
+
+.ok-text {
+  color: var(--ok);
+  margin: 0 0 4px;
+}
+
 .frame-position {
   display: flex;
   justify-content: space-between;

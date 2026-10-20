@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { torsoPoint } from '../timing/torso.ts'
 import { blobByteSource, demuxVideo, VideoFormatError, type DemuxedVideo } from '../video/demux.ts'
 import { FrameSource } from '../video/frameSource.ts'
 import { FrameViewer } from './FrameViewer.tsx'
+import { PoseAnalysisPanel } from './PoseAnalysisPanel.tsx'
+import { usePoseAnalysis } from './usePoseAnalysis.ts'
 import { VideoInfo } from './VideoInfo.tsx'
 
 type State =
@@ -11,6 +14,7 @@ type State =
   | {
       status: 'ready'
       id: number
+      file: File
       fileName: string
       video: DemuxedVideo
       /** null si el navegador no puede decodificar este vídeo. */
@@ -50,7 +54,7 @@ export function VideoAnalyzer() {
         frameSource?.close()
         return
       }
-      setState({ status: 'ready', id, fileName: file.name, video, frames: frameSource, decodeError })
+      setState({ status: 'ready', id, file, fileName: file.name, video, frames: frameSource, decodeError })
     } catch (error) {
       if (id !== loadId.current) return
       setState({ status: 'error', fileName: file.name, message: errorMessage(error) })
@@ -88,7 +92,7 @@ export function VideoAnalyzer() {
         <>
           <VideoInfo fileName={state.fileName} video={state.video} />
           {state.frames ? (
-            <FrameViewer key={state.id} source={state.frames} />
+            <LoadedVideo key={state.id} file={state.file} video={state.video} frames={state.frames} />
           ) : (
             <section className="card">
               <h2>Frames</h2>
@@ -97,6 +101,35 @@ export function VideoAnalyzer() {
           )}
         </>
       )}
+    </>
+  )
+}
+
+interface LoadedVideoProps {
+  file: File
+  video: DemuxedVideo
+  frames: FrameSource
+}
+
+/** Análisis de movimiento y visor de un vídeo ya cargado (uno por vídeo: se reinicia al cambiar). */
+function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
+  const analysis = usePoseAnalysis(file, video.frames.length)
+  // null: sin torso en ese frame; undefined: aún sin analizar.
+  const torso = useMemo(
+    () => Array.from(analysis.poses, (pose) => (pose ? (pose.torso ? torsoPoint(pose.torso) : null) : undefined)),
+    [analysis.poses],
+  )
+  return (
+    <>
+      <PoseAnalysisPanel
+        fileName={file.name}
+        video={video}
+        state={analysis.state}
+        torso={torso}
+        onStart={analysis.start}
+        onCancel={analysis.cancel}
+      />
+      <FrameViewer source={frames} poses={analysis.poses} torso={torso} />
     </>
   )
 }

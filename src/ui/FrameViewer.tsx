@@ -1,23 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FrameSource } from '../video/frameSource.ts'
+import type { PoseFrame, TorsoPoint } from '../timing/torso.ts'
 import { drawRotatedFrame } from '../video/drawFrame.ts'
+import type { FrameSource } from '../video/frameSource.ts'
 import { formatInteger, formatSeconds } from './format.ts'
+import { drawPoseOverlay } from './poseOverlay.ts'
 
 /** Lado mayor del canvas: suficiente para ver detalle sin gastar memoria con vídeos 4K. */
 const MAX_CANVAS_SIDE = 1280
 const BIG_STEP = 10
+/** Valor por defecto estable (un [] nuevo en cada render redibujaría la capa sin necesidad). */
+const NONE: readonly never[] = []
 
 interface FrameViewerProps {
   source: FrameSource
+  /** Pose de cada frame (undefined si aún no se ha analizado). */
+  poses?: readonly (PoseFrame | undefined)[]
+  /** Punto del torso de cada frame (null sin torso, undefined sin analizar). */
+  torso?: readonly (TorsoPoint | null | undefined)[]
 }
 
-export function FrameViewer({ source }: FrameViewerProps) {
+export function FrameViewer({ source, poses = NONE, torso = NONE }: FrameViewerProps) {
   const { video } = source
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const overlayRef = useRef<HTMLCanvasElement>(null)
   const [index, setIndex] = useState(0)
   const [shownIndex, setShownIndex] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showTrajectory, setShowTrajectory] = useState(true)
   const lastIndex = video.frames.length - 1
+  const hasPoses = poses.some(Boolean)
 
   const scale = Math.min(1, MAX_CANVAS_SIDE / Math.max(video.displayWidth, video.displayHeight))
   const canvasWidth = Math.round(video.displayWidth * scale)
@@ -44,6 +55,12 @@ export function FrameViewer({ source }: FrameViewerProps) {
     return () => controller.abort()
   }, [source, index, video.rotation])
 
+  // La capa del torso va en otro canvas: se redibuja sin volver a decodificar el frame.
+  useEffect(() => {
+    const ctx = overlayRef.current?.getContext('2d')
+    if (ctx) drawPoseOverlay(ctx, torso, poses[index], index, showTrajectory)
+  }, [torso, poses, index, showTrajectory])
+
   // Flechas del teclado en escritorio (salvo si el foco está en un control que ya las usa).
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -60,20 +77,41 @@ export function FrameViewer({ source }: FrameViewerProps) {
 
   const go = (target: number) => setIndex(Math.min(lastIndex, Math.max(0, target)))
   const frame = video.frames[index]
+  const currentTorso = torso[index]
 
   return (
     <section className="card">
       <h2>Frames</h2>
       <div className="viewer">
-        <canvas
-          ref={canvasRef}
-          width={canvasWidth}
-          height={canvasHeight}
-          className={shownIndex === index ? undefined : 'loading'}
-          aria-label={`Frame ${index + 1} del vídeo`}
-        />
+        <div className="viewer-stage">
+          <canvas
+            ref={canvasRef}
+            width={canvasWidth}
+            height={canvasHeight}
+            className={shownIndex === index ? undefined : 'loading'}
+            aria-label={`Frame ${index + 1} del vídeo`}
+          />
+          <canvas ref={overlayRef} width={canvasWidth} height={canvasHeight} className="overlay" aria-hidden="true" />
+        </div>
       </div>
       {error && <p className="error">{error}</p>}
+      {hasPoses && (
+        <div className="pose-status">
+          <span className={currentTorso ? undefined : 'muted'}>
+            {currentTorso === undefined
+              ? 'Frame sin analizar'
+              : currentTorso === null
+                ? 'Sin torso en este frame'
+                : currentTorso.source === 'both'
+                  ? 'Torso detectado'
+                  : 'Torso de un solo lado (menos preciso)'}
+          </span>
+          <label className="toggle">
+            <input type="checkbox" checked={showTrajectory} onChange={(event) => setShowTrajectory(event.target.checked)} />
+            Trayectoria
+          </label>
+        </div>
+      )}
       <p className="frame-position">
         <span>
           Frame {formatInteger(index + 1)} de {formatInteger(video.frames.length)}

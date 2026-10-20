@@ -2,7 +2,8 @@
 // no sirve en este navegador, en el hilo principal (más lento para la interfaz, pero
 // funciona).
 import type { PoseFrame } from '../timing/torso.ts'
-import type { FrameSource as FrameSourceInstance } from '../video/frameSource.ts'
+import { blobByteSource, demuxVideo, VideoFormatError } from '../video/demux.ts'
+import { FrameSource } from '../video/frameSource.ts'
 import type { AnalysisErrorKind, AnalysisRequest, AnalysisResponse } from './analysisMessages.ts'
 import type { PoseAnalysis } from './analyzePose.ts'
 import type { PoseDelegate, PoseModel } from './landmarker.ts'
@@ -116,14 +117,9 @@ async function runInMainThread(
   callbacks: PoseAnalysisCallbacks,
   signal: AbortSignal,
 ): Promise<Outcome> {
-  // Solo se cargan si hacen falta: MediaPipe pesa ~160 KB.
-  const [{ blobByteSource, demuxVideo, VideoFormatError }, { FrameSource }, { analyzePose }] =
-    await Promise.all([
-      import('../video/demux.ts'),
-      import('../video/frameSource.ts'),
-      import('./analyzePose.ts'),
-    ])
-  let source: FrameSourceInstance | null = null
+  // Solo se carga si hace falta: arrastra MediaPipe (~160 KB).
+  const { analyzePose } = await import('./analyzePose.ts')
+  let source: FrameSource | null = null
   try {
     const bytes = blobByteSource(file)
     const video = await demuxVideo(bytes)
