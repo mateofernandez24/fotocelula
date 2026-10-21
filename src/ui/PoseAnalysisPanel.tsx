@@ -47,6 +47,10 @@ export function PoseAnalysisPanel({ fileName, video, state, torso, onStart, onCa
           <Summary torso={torso} />
           <p className="note">
             Analizado en {formatSeconds(state.analysis.elapsedMs / 1000, 1)} · {state.engine}
+            {state.analysis.decoderRestarts > 0 &&
+              ` · el decodificador falló y se reanudó ${formatInteger(state.analysis.decoderRestarts)} ${
+                state.analysis.decoderRestarts === 1 ? 'vez' : 'veces'
+              }`}
           </p>
           <div className="buttons">
             <button

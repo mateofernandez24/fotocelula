@@ -23,6 +23,8 @@ export interface PoseAnalysis {
   /** Una entrada por frame del rango analizado, en orden. */
   frames: PoseFrame[]
   elapsedMs: number
+  /** Veces que falló el decodificador y se reanudó con uno nuevo (0 lo normal). */
+  decoderRestarts: number
 }
 
 export interface AnalyzePoseOptions {
@@ -73,6 +75,7 @@ export async function analyzePose(source: FrameSource, options: AnalyzePoseOptio
 
     const frames: PoseFrame[] = []
     const total = video.frames.length
+    let decoderRestarts = 0
     await source.forEachFrame(
       (frame, entry) => {
         drawRotatedFrame(ctx, frame, video.rotation)
@@ -86,7 +89,13 @@ export async function analyzePose(source: FrameSource, options: AnalyzePoseOptio
         frames.push(pose)
         options.onFrame?.(pose, frames.length, total)
       },
-      options.signal ? { signal: options.signal } : {},
+      {
+        ...(options.signal ? { signal: options.signal } : {}),
+        onDecoderRestart: (frameIndex, reason) => {
+          decoderRestarts++
+          console.warn(`Decodificador reiniciado en el frame ${frameIndex + 1}: ${reason}`)
+        },
+      },
     )
 
     return {
@@ -97,6 +106,7 @@ export async function analyzePose(source: FrameSource, options: AnalyzePoseOptio
       imageHeight: canvas.height,
       frames,
       elapsedMs: Math.round(performance.now() - start),
+      decoderRestarts,
     }
   } finally {
     landmarker.close()
