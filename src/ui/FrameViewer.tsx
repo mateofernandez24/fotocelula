@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { Gate } from '../timing/geometry.ts'
 import type { PoseFrame, TorsoPoint } from '../timing/torso.ts'
 import { drawRotatedFrame } from '../video/drawFrame.ts'
@@ -15,6 +15,11 @@ const NONE: readonly never[] = []
 
 interface FrameViewerProps {
   source: FrameSource
+  /** Frame que se muestra (índice desde 0). Lo controla quien usa el visor. */
+  index: number
+  onIndexChange: Dispatch<SetStateAction<number>>
+  /** Aviso sobre el frame actual (p. ej. que ahí se cruza una puerta). */
+  frameNote?: string | null
   /** Pose de cada frame (undefined si aún no se ha analizado). */
   poses?: readonly (PoseFrame | undefined)[]
   /** Punto del torso de cada frame (null sin torso, undefined sin analizar). */
@@ -24,11 +29,19 @@ interface FrameViewerProps {
   onGatesChange?: (gates: Gate[]) => void
 }
 
-export function FrameViewer({ source, poses = NONE, torso = NONE, gates = NONE, onGatesChange }: FrameViewerProps) {
+export function FrameViewer({
+  source,
+  index,
+  onIndexChange: setIndex,
+  frameNote = null,
+  poses = NONE,
+  torso = NONE,
+  gates = NONE,
+  onGatesChange,
+}: FrameViewerProps) {
   const { video } = source
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
-  const [index, setIndex] = useState(0)
   const [shownIndex, setShownIndex] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showTrajectory, setShowTrajectory] = useState(true)
@@ -78,7 +91,7 @@ export function FrameViewer({ source, poses = NONE, torso = NONE, gates = NONE, 
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [lastIndex])
+  }, [lastIndex, setIndex])
 
   const go = (target: number) => setIndex(Math.min(lastIndex, Math.max(0, target)))
   const frame = video.frames[index]
@@ -101,6 +114,7 @@ export function FrameViewer({ source, poses = NONE, torso = NONE, gates = NONE, 
         </div>
       </div>
       {error && <p className="error">{error}</p>}
+      {frameNote && <p className="frame-note">{frameNote}</p>}
       {hasPoses && (
         <div className="pose-status">
           <span className={currentTorso ? undefined : 'muted'}>

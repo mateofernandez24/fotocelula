@@ -265,6 +265,90 @@ button.small {
   font-size: 0.85rem;
 }
 
+.frame-note {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #000;
+  background: var(--gate);
+}
+
+h3 {
+  margin: 20px 0 4px;
+  font-size: 1rem;
+  color: var(--text-h);
+}
+
+.result-main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.result-main > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.result-main strong {
+  font-size: 1.6rem;
+  line-height: 1.2;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.splits,
+.crossings {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.splits li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.crossings li {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.crossing-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.crossing-actions {
+  margin-top: 8px;
+}
+
+.tag {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--text-h);
+  background: var(--border);
+}
+
+.tag.warn {
+  color: #000;
+  background: var(--warn);
+}
+
 .pose-status {
   display: flex;
   justify-content: space-between;

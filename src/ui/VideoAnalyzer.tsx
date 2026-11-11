@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { computeCourse, type ManualPair } from '../timing/course.ts'
 import type { Gate } from '../timing/geometry.ts'
-import { torsoPoint } from '../timing/torso.ts'
+import { torsoPoint, torsoTrack } from '../timing/torso.ts'
 import { blobByteSource, demuxVideo, VideoFormatError, type DemuxedVideo } from '../video/demux.ts'
 import { FrameSource } from '../video/frameSource.ts'
 import { FrameViewer } from './FrameViewer.tsx'
 import { addGate, defaultGates, removeGate } from './gates.ts'
 import { GatesPanel } from './GatesPanel.tsx'
 import { PoseAnalysisPanel } from './PoseAnalysisPanel.tsx'
+import { ResultsPanel } from './ResultsPanel.tsx'
 import { usePoseAnalysis } from './usePoseAnalysis.ts'
 import { VideoInfo } from './VideoInfo.tsx'
 
@@ -122,20 +124,58 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
     () => Array.from(analysis.poses, (pose) => (pose ? (pose.torso ? torsoPoint(pose.torso) : null) : undefined)),
     [analysis.poses],
   )
+  const [frameIndex, setFrameIndex] = useState(0)
   const [gates, setGates] = useState<Gate[]>(defaultGates)
   // Una distancia por cada par de puertas consecutivas.
   const [distances, setDistances] = useState<(number | null)[]>([null])
+  // Cruces marcados a mano, por índice de puerta.
+  const [manual, setManual] = useState<ReadonlyMap<number, ManualPair>>(() => new Map())
 
+  // Los cruces se calculan con el análisis completo (no a medias) y se recalculan al mover
+  // las puertas, cambiar distancias o marcar cruces a mano.
+  const done = analysis.state.status === 'done' ? analysis.state.analysis : null
+  const track = useMemo(() => (done ? torsoTrack(done.frames) : null), [done])
+  const course = useMemo(
+    () =>
+      track
+        ? computeCourse(track, gates, distances, manual, { aspect: video.displayWidth / video.displayHeight })
+        : null,
+    [track, gates, distances, manual, video.displayWidth, video.displayHeight],
+  )
+
+  // Aviso en el visor si en este frame (o justo después) se cruza una puerta.
+  const frameNote =
+    course?.gates
+      .map(({ crossing }, i) =>
+        crossing && (frameIndex === crossing.beforeFrame || frameIndex === crossing.afterFrame)
+          ? `Puerta ${i + 1}: el torso la cruza entre los frames ${crossing.beforeFrame + 1} y ${crossing.afterFrame + 1}.`
+          : null,
+      )
+      .filter(Boolean)
+      .join(' ') || null
+
+  // Al añadir o quitar puertas cambian los índices: los cruces manuales dejan de valer.
   function onAddGate() {
     const next = addGate(gates, distances)
     setGates(next.gates)
     setDistances(next.distances)
+    setManual(new Map())
   }
 
   function onRemoveGate(index: number) {
     const next = removeGate(gates, distances, index)
     setGates(next.gates)
     setDistances(next.distances)
+    setManual(new Map())
+  }
+
+  function setManualPair(gateIndex: number, pair: ManualPair | null) {
+    setManual((previous) => {
+      const next = new Map(previous)
+      if (pair) next.set(gateIndex, pair)
+      else next.delete(gateIndex)
+      return next
+    })
   }
 
   return (
@@ -148,13 +188,35 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
         onStart={analysis.start}
         onCancel={analysis.cancel}
       />
-      <FrameViewer source={frames} poses={analysis.poses} torso={torso} gates={gates} onGatesChange={setGates} />
+      <FrameViewer
+        source={frames}
+        index={frameIndex}
+        onIndexChange={setFrameIndex}
+        frameNote={frameNote}
+        poses={analysis.poses}
+        torso={torso}
+        gates={gates}
+        onGatesChange={setGates}
+      />
       <GatesPanel
         gates={gates}
         distances={distances}
         onAdd={onAddGate}
         onRemove={onRemoveGate}
         onDistanceChange={(index, value) => setDistances((d) => d.map((v, i) => (i === index ? value : v)))}
+      />
+      <ResultsPanel
+        course={course}
+        gates={gates}
+        distances={distances}
+        fps={video.timing.fps}
+        currentFrame={frameIndex}
+        onGoToFrame={(frame) => {
+          setFrameIndex(frame)
+          document.querySelector('.viewer')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }}
+        onMarkHere={(gateIndex) => setManualPair(gateIndex, { beforeFrame: frameIndex - 1, afterFrame: frameIndex })}
+        onAutomatic={(gateIndex) => setManualPair(gateIndex, null)}
       />
     </>
   )
