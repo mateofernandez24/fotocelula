@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import type { Gate } from '../timing/geometry.ts'
 import { torsoPoint } from '../timing/torso.ts'
 import { blobByteSource, demuxVideo, VideoFormatError, type DemuxedVideo } from '../video/demux.ts'
 import { FrameSource } from '../video/frameSource.ts'
 import { FrameViewer } from './FrameViewer.tsx'
+import { addGate, defaultGates, removeGate } from './gates.ts'
+import { GatesPanel } from './GatesPanel.tsx'
 import { PoseAnalysisPanel } from './PoseAnalysisPanel.tsx'
 import { usePoseAnalysis } from './usePoseAnalysis.ts'
 import { VideoInfo } from './VideoInfo.tsx'
@@ -119,6 +122,22 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
     () => Array.from(analysis.poses, (pose) => (pose ? (pose.torso ? torsoPoint(pose.torso) : null) : undefined)),
     [analysis.poses],
   )
+  const [gates, setGates] = useState<Gate[]>(defaultGates)
+  // Una distancia por cada par de puertas consecutivas.
+  const [distances, setDistances] = useState<(number | null)[]>([null])
+
+  function onAddGate() {
+    const next = addGate(gates, distances)
+    setGates(next.gates)
+    setDistances(next.distances)
+  }
+
+  function onRemoveGate(index: number) {
+    const next = removeGate(gates, distances, index)
+    setGates(next.gates)
+    setDistances(next.distances)
+  }
+
   return (
     <>
       <PoseAnalysisPanel
@@ -129,7 +148,14 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
         onStart={analysis.start}
         onCancel={analysis.cancel}
       />
-      <FrameViewer source={frames} poses={analysis.poses} torso={torso} />
+      <FrameViewer source={frames} poses={analysis.poses} torso={torso} gates={gates} onGatesChange={setGates} />
+      <GatesPanel
+        gates={gates}
+        distances={distances}
+        onAdd={onAddGate}
+        onRemove={onRemoveGate}
+        onDistanceChange={(index, value) => setDistances((d) => d.map((v, i) => (i === index ? value : v)))}
+      />
     </>
   )
 }
