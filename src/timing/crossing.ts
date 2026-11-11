@@ -54,6 +54,12 @@ export interface Crossing {
    * el torso se acerca a la línea. Nunca menos de ⅛ del intervalo entre los dos frames.
    */
   uncertaintyS: number
+  /**
+   * El torso aparece o desaparece cerca de la puerta (al principio o al final de la
+   * trayectoria, p. ej. en el borde de la imagen), así que no se le ve claramente a uno de
+   * los dos lados: el cruce no está confirmado por la histéresis y es menos fiable.
+   */
+  atTrackEdge: boolean
 }
 
 interface Sample {
@@ -66,6 +72,11 @@ interface Sample {
  * Todos los cruces de una puerta, en orden. Para cada uno, el instante se estima ajustando
  * una recta a la distancia con signo desde el último frame claramente a un lado hasta el
  * primero claramente al otro (con solo esos dos frames, es la interpolación lineal).
+ *
+ * Al principio y al final de cada tramo de trayectoria (cuando el torso aparece o
+ * desaparece, p. ej. por el borde de la imagen) el lado en que está cuenta aunque no esté
+ * claro: si no, una puerta cerca del borde nunca se detectaría. Esos cruces se marcan con
+ * `atTrackEdge`.
  */
 export function findAllCrossings(
   track: readonly TrackSample[],
@@ -82,30 +93,57 @@ export function findAllCrossings(
   }
 
   const crossings: Crossing[] = []
-  // Lado en el que el torso estaba claramente (fuera de la banda de histéresis) y el
-  // último frame en el que lo estaba.
+  // Lado en el que estaba el torso y el último frame en el que se le vio ahí. `provisional`:
+  // el lado viene del inicio del tramo, sin haber salido de la banda de histéresis.
   let side: 0 | 1 | -1 = 0
   let lastClear = -1
+  let provisional = false
+  let segmentStart = 0
+
+  const push = (crossing: Crossing | null, atTrackEdge: boolean) => {
+    if (crossing) crossings.push({ ...crossing, atTrackEdge })
+  }
+  // Fin de un tramo: si el torso desaparece ya al otro lado (aunque sin salir de la
+  // banda), también es un cruce.
+  const closeSegment = (end: number) => {
+    const last = samples[end]
+    if (side !== 0 && lastClear >= 0 && end > lastClear && last && Math.sign(last.s) === -side) {
+      push(fitCrossing(samples.slice(lastClear, end + 1), side === 1 ? -1 : 1), true)
+    }
+  }
+
   for (let i = 0; i < samples.length; i++) {
     const current = samples[i] as Sample
     const previous = samples[i - 1]
     // Un hueco largo sin torso corta la trayectoria.
     if (previous && current.t - previous.t > maxGapS) {
+      closeSegment(i - 1)
       side = 0
       lastClear = -1
+      segmentStart = i
     }
     const clearSide = current.s >= hysteresis ? 1 : current.s <= -hysteresis ? -1 : 0
-    if (clearSide === 0) continue
+    if (clearSide === 0) {
+      // El tramo empieza ya dentro de la banda: lado provisional.
+      if (side === 0 && i === segmentStart && current.s !== 0) {
+        side = current.s > 0 ? 1 : -1
+        lastClear = i
+        provisional = true
+      }
+      continue
+    }
     if (side === 0 || clearSide === side) {
       side = clearSide
       lastClear = i
+      provisional = false
       continue
     }
-    const crossing = fitCrossing(samples.slice(lastClear, i + 1), clearSide)
-    if (crossing) crossings.push(crossing)
+    push(fitCrossing(samples.slice(lastClear, i + 1), clearSide), provisional)
     side = clearSide
     lastClear = i
+    provisional = false
   }
+  closeSegment(samples.length - 1)
   return crossings
 }
 
@@ -164,6 +202,7 @@ export function manualCrossing(
     direction: 0,
     fitFrames: 0,
     uncertaintyS: interval / 2,
+    atTrackEdge: false,
   }
 }
 
@@ -254,5 +293,6 @@ function fitCrossing(window: readonly Sample[], direction: 1 | -1): Crossing | n
     direction,
     fitFrames: n,
     uncertaintyS: Math.max(2 * sigma, interval / 8),
+    atTrackEdge: false,
   }
 }

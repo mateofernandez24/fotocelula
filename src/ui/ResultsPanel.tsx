@@ -57,7 +57,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
       <h3>Cruces</h3>
       <p className="note">
         Para corregir un cruce: avanza en el visor hasta el <strong>primer frame en que el torso ya ha
-        pasado la línea</strong> y pulsa «Marcar aquí».
+        pasado la línea</strong> y pulsa «Marcar aquí». Los cruces «poco fiables» (por ejemplo, una puerta
+        en el borde de la imagen, donde el deportista aparece o desaparece) conviene revisarlos.
       </p>
       <ul className="crossings">
         {course.gates.map(({ crossing, manual }, index) => (
@@ -76,7 +77,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 <span className="error">No se ha detectado el cruce</span>
               )}
               {manual && <span className="tag">a mano</span>}
-              {crossing && !manual && crossing.uncertaintyS > 1 / fps / 2 && <span className="tag warn">poco fiable</span>}
+              {crossing && !manual && (crossing.atTrackEdge || crossing.uncertaintyS > 1 / fps / 2) && (
+                <span className="tag warn">poco fiable</span>
+              )}
             </div>
             <div className="buttons crossing-actions">
               {crossing && (

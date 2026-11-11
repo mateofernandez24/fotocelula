@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import type { PoseDataFile } from '../pose/poseExport.ts'
 import { findAllCrossings, findCrossings, manualCrossing, type TrackSample } from './crossing.ts'
 import type { Gate } from './geometry.ts'
+import { torsoTrack } from './torso.ts'
 
 const PORTRAIT = 1080 / 1920
 const OPTIONS = { aspect: PORTRAIT }
@@ -132,6 +135,53 @@ describe('findAllCrossings', () => {
     const tilted: Gate = { a: { x: 0.45, y: 0 }, b: { x: 0.55, y: 1 } }
     const crossing = findAllCrossings(track(at30, 0.9, -0.2), tilted, OPTIONS)[0]
     expect(crossing?.timeS).toBeCloseTo((0.9 - 0.495) / 0.2, 9)
+  })
+})
+
+describe('puertas donde el torso aparece o desaparece (bordes de la imagen)', () => {
+  /** Trayectoria visible solo mientras x está en [xMin, xMax] (fuera, sin torso). */
+  const visible = (samples: TrackSample[], xMin: number, xMax: number) =>
+    samples.map((f) => (f.point && f.point.x >= xMin && f.point.x <= xMax ? f : { ...f, point: null }))
+
+  it('el torso aparece ya junto a la puerta y se aleja: cruce detectado, marcado como poco fiable', () => {
+    // Se ve desde x ≤ 0,985 (el primer frame, en x = 0,98) y la puerta está en 0,97: nunca
+    // se le ve "claramente" a la derecha (haría falta x ≥ 0,988).
+    const samples = visible(track(at30, 1.1, -0.36), -1, 0.985)
+    const crossings = findAllCrossings(samples, gateAt(0.97), OPTIONS)
+    expect(crossings).toHaveLength(1)
+    expect(crossings[0]?.atTrackEdge).toBe(true)
+    expect(crossings[0]?.timeS).toBeCloseTo((1.1 - 0.97) / 0.36, 1)
+  })
+
+  it('el torso desaparece justo después de cruzar: cruce detectado, marcado como poco fiable', () => {
+    // Deja de verse en x < 0,015: el último frame (x = 0,024) ya ha pasado la puerta (0,03),
+    // pero no "claramente" (haría falta x ≤ 0,012).
+    const samples = visible(track(at30, 0.9, -0.36), 0.015, 2)
+    const crossings = findAllCrossings(samples, gateAt(0.03), OPTIONS)
+    expect(crossings).toHaveLength(1)
+    expect(crossings[0]?.atTrackEdge).toBe(true)
+    expect(crossings[0]?.timeS).toBeCloseTo((0.9 - 0.03) / 0.36, 1)
+  })
+
+  it('si aparece ya pasada la puerta, no se inventa un cruce', () => {
+    const samples = visible(track(at30, 1.1, -0.36), -1, 0.965)
+    expect(findAllCrossings(samples, gateAt(0.97), OPTIONS)).toEqual([])
+  })
+
+  it('un cruce normal, lejos de los bordes, no se marca', () => {
+    expect(findAllCrossings(track(at30, 0.9, -0.2), gateAt(0.5), OPTIONS)[0]?.atTrackEdge).toBe(false)
+  })
+
+  it('vídeo real (IMG_E0936): la puerta derecha se detecta aunque quede en el mismo borde', () => {
+    const pose = JSON.parse(readFileSync('test-data/IMG_E0936.pose.json', 'utf8')) as PoseDataFile
+    const aspect = pose.video.displayWidth / pose.video.displayHeight
+    const samples = torsoTrack(pose.analysis.frames)
+    for (const x of [0.968, 0.97, 0.975]) {
+      const crossings = findAllCrossings(samples, gateAt(x), { aspect })
+      expect(crossings, `puerta en x = ${x}`).toHaveLength(1)
+      expect(crossings[0]?.beforeFrame).toBeGreaterThanOrEqual(33)
+      expect(crossings[0]?.afterFrame).toBeLessThanOrEqual(38)
+    }
   })
 })
 

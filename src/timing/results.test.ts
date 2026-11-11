@@ -3,7 +3,7 @@ import type { Crossing } from './crossing.ts'
 import { computeRunResults } from './results.ts'
 
 function crossing(timeS: number, uncertaintyS = 0.01): Crossing {
-  return { timeS, beforeFrame: 0, afterFrame: 1, gapFrames: 0, direction: -1, fitFrames: 4, uncertaintyS }
+  return { timeS, beforeFrame: 0, afterFrame: 1, gapFrames: 0, direction: -1, fitFrames: 4, uncertaintyS, atTrackEdge: false }
 }
 
 describe('computeRunResults', () => {
