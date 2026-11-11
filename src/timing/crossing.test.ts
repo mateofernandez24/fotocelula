@@ -24,11 +24,16 @@ function track(
 const at30 = Array.from({ length: 120 }, (_, i) => i / 30)
 const at60 = Array.from({ length: 240 }, (_, i) => i / 60)
 
-/** Ruido determinista en [-amplitude, amplitude] (sin Math.random, para que el test sea estable). */
+/**
+ * Ruido pseudoaleatorio en [-amplitude, amplitude], independiente en cada frame y
+ * determinista (sin Math.random, para que el test sea estable).
+ */
 const jitter =
   (amplitude: number, seed = 4.1414) =>
-  (i: number) =>
-    amplitude * Math.sin(i * 12.9898 + seed)
+  (i: number) => {
+    const hash = Math.sin(i * 12.9898 + seed * 78.233) * 43758.5453
+    return amplitude * (2 * (hash - Math.floor(hash)) - 1)
+  }
 
 /** Interpolación simple entre los dos frames donde cambia el signo (para comparar). */
 function naiveCrossing(samples: readonly TrackSample[], x: number): number | null {
@@ -158,6 +163,56 @@ describe('findCrossings (varias puertas, en orden)', () => {
     const result = findCrossings(track(at30, 0.9, -0.1), [gateAt(0.7), gateAt(0.1)], OPTIONS)
     expect(result[0]?.timeS).toBeCloseTo(2, 9)
     expect(result[1]).toBeNull()
+  })
+})
+
+describe('incertidumbre del cruce', () => {
+  it.each([-0.2, -0.36, -0.6])(
+    'con temblor realista (vx = %s): cubre el error y en media queda por debajo de ½ frame',
+    (vx) => {
+      const trueTime = 0.4 / -vx
+      let covered = 0
+      let sum = 0
+      for (let k = 0; k < 50; k++) {
+        const c = findAllCrossings(track(at30, 0.9, vx, jitter(0.003, k * 0.37)), gateAt(0.5), OPTIONS)[0]
+        if (c && Math.abs(c.timeS - trueTime) <= c.uncertaintyS) covered++
+        sum += c?.uncertaintyS ?? Infinity
+      }
+      expect(covered).toBeGreaterThanOrEqual(45)
+      expect(sum / 50).toBeLessThan(1 / 30 / 2)
+    },
+  )
+
+  it('nunca menos de ⅛ del intervalo entre frames', () => {
+    // Cruza la imagen en un tercio de segundo: el error por temblor sería despreciable.
+    const crossing = findAllCrossings(track(at30, 0.9, -3), gateAt(0.5), OPTIONS)[0]
+    expect(crossing?.uncertaintyS).toBeCloseTo(1 / 30 / 8, 9)
+  })
+
+  it('sin ruido y despacio: pequeña (se supone un temblor mínimo del punto)', () => {
+    const crossing = findAllCrossings(track(at30, 0.6, -0.05), gateAt(0.5), OPTIONS)[0]
+    expect(crossing?.fitFrames).toBeGreaterThanOrEqual(4)
+    expect(crossing?.uncertaintyS).toBeLessThan(1 / 30 / 2)
+  })
+
+  it('crece con el temblor del punto', () => {
+    const quiet = findAllCrossings(track(at30, 0.6, -0.05, jitter(0.001)), gateAt(0.5), OPTIONS)[0]
+    const shaky = findAllCrossings(track(at30, 0.6, -0.05, jitter(0.006)), gateAt(0.5), OPTIONS)[0]
+    expect(shaky?.uncertaintyS ?? 0).toBeGreaterThan(quiet?.uncertaintyS ?? Infinity)
+  })
+
+  it('cubre el error real en la mayoría de los casos con temblor', () => {
+    let covered = 0
+    for (let k = 0; k < 50; k++) {
+      const c = findAllCrossings(track(at30, 0.6, -0.05, jitter(0.004, k * 0.37)), gateAt(0.5), OPTIONS)[0]
+      if (c && Math.abs(c.timeS - 2) <= c.uncertaintyS) covered++
+    }
+    expect(covered).toBeGreaterThanOrEqual(40)
+  })
+
+  it('cruce manual sin torso: medio intervalo', () => {
+    const samples = track(at30, 0.9, -0.2).map((f) => (f.frameIndex === 70 ? { ...f, point: null } : f))
+    expect(manualCrossing(samples, gateAt(0.5), 70, 71, PORTRAIT)?.uncertaintyS).toBeCloseTo(1 / 60, 9)
   })
 })
 

@@ -24,6 +24,15 @@ export interface CrossingOptions {
 
 export const DEFAULT_HYSTERESIS = 0.01
 export const DEFAULT_MAX_GAP_S = 0.2
+/**
+ * Temblor típico del punto del torso (desviación, en altos de imagen) cuando no hay frames
+ * suficientes para estimarlo con los residuos del ajuste.
+ */
+export const DEFAULT_POINT_NOISE = 0.003
+/** Temblor mínimo supuesto aunque los residuos salgan menores (el modelo no es perfecto). */
+const MIN_POINT_NOISE = 0.001
+/** Frames necesarios para estimar el temblor con los residuos del ajuste. */
+const MIN_RESIDUAL_FRAMES = 4
 
 export interface Crossing {
   /** Instante interpolado del cruce, en segundos. */
@@ -40,6 +49,11 @@ export interface Crossing {
   direction: 1 | -1 | 0
   /** Frames usados para ajustar la recta del cruce (de un lado claro al otro). */
   fitFrames: number
+  /**
+   * Incertidumbre del instante (± s, ≈ 2σ): temblor del punto entre la velocidad con que
+   * el torso se acerca a la línea. Nunca menos de ⅛ del intervalo entre los dos frames.
+   */
+  uncertaintyS: number
 }
 
 interface Sample {
@@ -126,30 +140,30 @@ export function manualCrossing(
   const before = track.find((f) => f.frameIndex === beforeFrame)
   const after = track.find((f) => f.frameIndex === afterFrame)
   if (!before || !after || after.timestampS <= before.timestampS) return null
-  const gapFrames = Math.max(0, afterFrame - beforeFrame - 1)
   if (before.point && after.point) {
     const s0 = signedDistance(gate, before.point, aspect)
     const s1 = signedDistance(gate, after.point, aspect)
-    // Si de verdad cambia de lado entre los dos frames, se interpola.
+    // Si de verdad cambia de lado entre los dos frames, se interpola (ajuste con 2 frames).
     if (s0 !== s1 && Math.sign(s0) !== Math.sign(s1)) {
-      const fraction = s0 / (s0 - s1)
-      return {
-        timeS: before.timestampS + fraction * (after.timestampS - before.timestampS),
-        beforeFrame,
-        afterFrame,
-        gapFrames,
-        direction: s1 > s0 ? 1 : -1,
-        fitFrames: 2,
-      }
+      return fitCrossing(
+        [
+          { frameIndex: beforeFrame, t: before.timestampS, s: s0 },
+          { frameIndex: afterFrame, t: after.timestampS, s: s1 },
+        ],
+        s1 > s0 ? 1 : -1,
+      )
     }
   }
+  // Sin torso que interpolar: punto medio, con el intervalo completo como incertidumbre.
+  const interval = after.timestampS - before.timestampS
   return {
-    timeS: (before.timestampS + after.timestampS) / 2,
+    timeS: before.timestampS + interval / 2,
     beforeFrame,
     afterFrame,
-    gapFrames,
+    gapFrames: Math.max(0, afterFrame - beforeFrame - 1),
     direction: 0,
     fitFrames: 0,
+    uncertaintyS: interval / 2,
   }
 }
 
@@ -185,31 +199,60 @@ function fitCrossing(window: readonly Sample[], direction: 1 | -1): Crossing | n
     timeS = first.t + (first.s / (first.s - last.s)) * (last.t - first.t)
   }
 
-  // El cruce no puede caer donde los datos dicen que el torso aún no ha cambiado de lado:
-  // se acota entre el primer y el último par de frames en que cambia el signo. (En el
-  // borde de la imagen, un punto atípico puede tirar de la recta fuera de ese tramo.)
+  // Tramo donde los datos dicen que el torso cambia de lado: del primer al último par de
+  // frames en que cambia el signo.
   const changes: number[] = []
   for (let i = 0; i < window.length - 1; i++) {
     const a = (window[i] as Sample).s
     const b = (window[i + 1] as Sample).s
     if (a !== b && Math.sign(a) !== Math.sign(b)) changes.push(i)
   }
-  const firstChange = changes[0] ?? 0
-  const lastChange = changes.at(-1) ?? window.length - 2
-  const low = (window[firstChange] as Sample).t
-  const high = (window[lastChange + 1] as Sample).t
-  timeS = Math.min(high, Math.max(low, timeS))
+  const low = (window[changes[0] ?? 0] as Sample).t
+  const high = (window[(changes.at(-1) ?? window.length - 2) + 1] as Sample).t
 
-  // Par de frames con cambio de signo que contiene el instante estimado.
-  const beforeIndex = changes.find((i) => (window[i + 1] as Sample).t >= timeS) ?? lastChange
+  // Incertidumbre: error del cero de una recta ajustada por mínimos cuadrados,
+  // σ_t0 = (σ_s / |pendiente|) · √(1/n + (t0 − t̄)² / Σ(t − t̄)²).
+  const n = window.length
+  let sigma: number
+  if (slope * direction > 0) {
+    let squaredResiduals = 0
+    for (const p of window) {
+      const residual = p.s - (meanS + slope * (p.t - first.t - meanT))
+      squaredResiduals += residual * residual
+    }
+    const noise =
+      n >= MIN_RESIDUAL_FRAMES
+        ? Math.max(Math.sqrt(squaredResiduals / (n - 2)), MIN_POINT_NOISE)
+        : DEFAULT_POINT_NOISE
+    const t0 = timeS - first.t
+    sigma = (noise / Math.abs(slope)) * Math.sqrt(1 / n + (t0 - meanT) ** 2 / variance)
+  } else {
+    sigma = (high - low) / 2
+  }
+
+  // El cruce no se aleja del tramo de cambio de signo más de lo que permite su
+  // incertidumbre: un punto atípico (p. ej. en el borde de la imagen) no puede tirar de
+  // la recta a donde el torso aún no ha cruzado, pero el ruido sí puede mover el cambio
+  // de signo un frame sin que eso desplace el resultado.
+  timeS = Math.min(high + 2 * sigma, Math.max(low - 2 * sigma, timeS))
+  timeS = Math.min(last.t, Math.max(first.t, timeS))
+
+  // Frames con torso que rodean el instante estimado.
+  let beforeIndex = 0
+  for (let i = 0; i < window.length - 1; i++) {
+    if ((window[i] as Sample).t <= timeS) beforeIndex = i
+  }
   const before = window[beforeIndex] as Sample
   const after = window[beforeIndex + 1] as Sample
+  const interval = after.t - before.t
+
   return {
     timeS,
     beforeFrame: before.frameIndex,
     afterFrame: after.frameIndex,
     gapFrames: Math.max(0, after.frameIndex - before.frameIndex - 1),
     direction,
-    fitFrames: window.length,
+    fitFrames: n,
+    uncertaintyS: Math.max(2 * sigma, interval / 8),
   }
 }
