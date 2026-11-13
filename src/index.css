@@ -1,38 +1,32 @@
+/* Tema oscuro deportivo (siempre oscuro): fondo casi negro, acento verde neón y números grandes. */
 :root {
-  --text: #3d3a44;
-  --text-h: #0c0a10;
-  --muted: #6b6775;
-  --bg: #f6f5f2;
-  --card: #fff;
-  --border: #e3e1e6;
-  --accent: #0a7c55;
-  --ok: #0a7c55;
-  --fail: #c0362c;
-  --warn: #b7791f;
+  --bg: #08090b;
+  --card: #131519;
+  --surface-2: #1b1e24;
+  --border: #252932;
+  --text: #c5c9d2;
+  --text-h: #f5f6f8;
+  --muted: #868c99;
+  --accent: #2bff88;
+  /* Texto sobre el acento (el verde es muy claro). */
+  --accent-ink: #04140b;
+  --accent-soft: rgba(43, 255, 136, 0.12);
+  --ok: #2bff88;
+  --fail: #ff5a5f;
+  --warn: #ffb020;
   --gate: #ffd60a;
   --ref: #4cc9f0;
+  --radius: 16px;
+  --tabbar-height: 64px;
 
-  font: 16px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  color-scheme: light dark;
+  font: 16px/1.45 -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #d4d2da;
-    --text-h: #f5f4f8;
-    --muted: #9893a3;
-    --bg: #121116;
-    --card: #1c1b22;
-    --border: #2f2d38;
-    --accent: #3ccf95;
-    --ok: #3ccf95;
-    --fail: #ff7a6e;
-    --warn: #f0b44c;
-  }
+  -webkit-tap-highlight-color: transparent;
+  accent-color: var(--accent);
 }
 
 body {
@@ -43,7 +37,8 @@ body {
 main {
   max-width: 640px;
   margin: 0 auto;
-  padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  /* Abajo deja sitio para la barra de pestañas fija. */
+  padding: max(12px, env(safe-area-inset-top)) 16px calc(var(--tabbar-height) + env(safe-area-inset-bottom) + 24px);
 }
 
 h1,
@@ -53,35 +48,112 @@ h2 {
 }
 
 h1 {
-  font-size: 1.75rem;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 h2 {
   font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   margin-bottom: 12px;
 }
 
-.tabs {
+.app-header {
   display: flex;
-  gap: 4px;
-  margin: 12px 0 16px;
-  padding: 4px;
-  background: var(--card);
-  border: 1px solid var(--border);
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 16px;
+}
+
+.app-logo {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: var(--accent-ink);
+  background: var(--accent);
+  box-shadow: 0 0 24px rgba(43, 255, 136, 0.35);
+}
+
+.app-header p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* Barra de pestañas fija abajo, como en una app del móvil. */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  padding: 6px 8px env(safe-area-inset-bottom);
+  background: rgba(10, 11, 14, 0.82);
+  border-top: 1px solid var(--border);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+.tabbar-inner {
+  display: flex;
+  width: 100%;
+  max-width: 640px;
+}
+
+.tabbar button {
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-height: var(--tabbar-height);
+  padding: 6px 4px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
   border-radius: 12px;
 }
 
-.tabs button {
-  flex: 1;
-  color: var(--muted);
-  background: transparent;
-  min-height: 40px;
-  padding: 8px 12px;
+.tabbar button svg {
+  width: 26px;
+  height: 26px;
 }
 
-.tabs button[aria-current='page'] {
-  color: var(--text-h);
-  background: var(--bg);
+.tabbar button[aria-current='page'] {
+  color: var(--accent);
+}
+
+.tabbar button:disabled {
+  opacity: 0.35;
+}
+
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.empty-state svg {
+  width: 48px;
+  height: 48px;
+  color: var(--muted);
+}
+
+.empty-state h2 {
+  margin: 8px 0 0;
+}
+
+.empty-state p {
+  margin: 0;
+  max-width: 32ch;
+  color: var(--muted);
 }
 
 .note {
@@ -103,7 +175,7 @@ h2 {
   border-radius: 8px;
   font-size: 0.9rem;
   border-left: 4px solid var(--muted);
-  background: var(--bg);
+  background: var(--surface-2);
 }
 
 .warnings .error {
@@ -295,7 +367,7 @@ h2 {
   padding: 8px 12px;
   border-left: 4px solid var(--warn);
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--surface-2);
   font-size: 0.9rem;
 }
 
@@ -313,7 +385,7 @@ h2 {
   padding: 0 10px;
   text-align: right;
   color: var(--text-h);
-  background: var(--bg);
+  background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
 }
@@ -354,12 +426,14 @@ h3 {
   flex-direction: column;
   gap: 2px;
   padding: 12px;
-  border-radius: 10px;
-  background: var(--bg);
+  border-radius: 12px;
+  background: var(--surface-2);
 }
 
 .result-main strong {
-  font-size: 1.6rem;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
   line-height: 1.2;
   color: var(--text-h);
   font-variant-numeric: tabular-nums;
@@ -469,7 +543,7 @@ h3 {
 select {
   font: inherit;
   color: var(--text-h);
-  background: var(--bg);
+  background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0 12px;
@@ -517,7 +591,7 @@ select {
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 16px;
   margin-bottom: 16px;
 }
@@ -579,10 +653,10 @@ button,
   box-sizing: border-box;
   font: inherit;
   font-weight: 600;
-  color: #fff;
+  color: var(--accent-ink);
   background: var(--accent);
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 12px 20px;
   min-height: 44px;
   cursor: pointer;
@@ -590,7 +664,7 @@ button,
 
 button.secondary {
   color: var(--text-h);
-  background: var(--bg);
+  background: var(--surface-2);
   border: 1px solid var(--border);
 }
 
