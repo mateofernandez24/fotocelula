@@ -620,6 +620,37 @@ button:disabled {
   display: none;
 }
 
+.recorder-stage {
+  position: relative;
+}
+
+.recorder .preview {
+  max-height: 65vh;
+  object-fit: contain;
+}
+
+.recording-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: rgba(192, 54, 44, 0.9);
+}
+
+.recorder-info {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Rojo fijo (no el de --fail, que en modo oscuro es claro y no contrasta con el texto blanco). */
+button.record-button,
+button.stop-button {
+  background: #c0362c;
+}
+
 .recording-test {
   margin-top: 16px;
 }

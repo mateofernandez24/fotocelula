@@ -10,6 +10,7 @@ import { formatMeters } from './format.ts'
 import { GateLayer } from './GateLayer.tsx'
 import { addGate, defaultGates, defaultReferenceBars, removeGate } from './gates.ts'
 import { GatesPanel } from './GatesPanel.tsx'
+import { Recorder } from './Recorder.tsx'
 import { ReferencePanel } from './ReferencePanel.tsx'
 import { PoseAnalysisPanel } from './PoseAnalysisPanel.tsx'
 import { ResultsPanel } from './ResultsPanel.tsx'
@@ -39,6 +40,7 @@ function errorMessage(error: unknown): string {
 
 export function VideoAnalyzer() {
   const [state, setState] = useState<State>({ status: 'empty' })
+  const [recording, setRecording] = useState(false)
   const loadId = useRef(0)
 
   // Libera el decodificador al cambiar de vídeo o salir de la pantalla.
@@ -85,10 +87,15 @@ export function VideoAnalyzer() {
           Importa un vídeo de la galería o grábalo con la cámara. Se analiza en tu dispositivo: no
           se sube a ningún sitio.
         </p>
-        <label className="button">
-          {state.status === 'empty' ? 'Importar vídeo' : 'Importar otro vídeo'}
-          <input type="file" accept="video/*" className="visually-hidden" onChange={onFileChange} />
-        </label>
+        <div className="buttons">
+          <label className={`button${recording ? ' disabled' : ''}`}>
+            {state.status === 'empty' ? 'Importar vídeo' : 'Importar otro vídeo'}
+            <input type="file" accept="video/*" className="visually-hidden" onChange={onFileChange} />
+          </label>
+          <button type="button" className="secondary" onClick={() => setRecording(true)} disabled={recording}>
+            Grabar vídeo
+          </button>
+        </div>
         {state.status === 'loading' && <p className="note">Leyendo {state.fileName}…</p>}
         {state.status === 'error' && (
           <p className="error">
@@ -97,8 +104,19 @@ export function VideoAnalyzer() {
         )}
       </section>
 
+      {recording && (
+        <Recorder
+          onRecorded={(file) => {
+            setRecording(false)
+            void load(file)
+          }}
+          onClose={() => setRecording(false)}
+        />
+      )}
+
+      {/* Mientras se graba, el vídeo anterior se oculta pero no se pierde (por si se cancela). */}
       {state.status === 'ready' && (
-        <>
+        <div hidden={recording}>
           <VideoInfo fileName={state.fileName} video={state.video} />
           {state.frames ? (
             <LoadedVideo key={state.id} file={state.file} video={state.video} frames={state.frames} />
@@ -108,7 +126,7 @@ export function VideoAnalyzer() {
               <p className="error">{state.decodeError}</p>
             </section>
           )}
-        </>
+        </div>
       )}
     </>
   )

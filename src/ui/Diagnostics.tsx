@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { PoseBenchmark } from './PoseBenchmark.tsx'
 import { RecordingTest } from './RecordingTest.tsx'
+import { describeCameraError, openCamera, useMeasuredFps, useStreamPreview } from './camera.ts'
 
 interface Check {
   label: string
@@ -78,25 +79,6 @@ function runChecks(): Check[] {
   ]
 }
 
-function describeCameraError(error: unknown): string {
-  if (!window.isSecureContext) {
-    return 'La cámara solo funciona en una conexión segura (HTTPS).'
-  }
-  if (error instanceof DOMException) {
-    switch (error.name) {
-      case 'NotAllowedError':
-        return 'Permiso de cámara denegado. Actívalo en los ajustes del navegador y vuelve a intentarlo.'
-      case 'NotFoundError':
-        return 'No se ha encontrado ninguna cámara.'
-      case 'NotReadableError':
-        return 'La cámara está en uso por otra aplicación.'
-      default:
-        return `${error.name}: ${error.message}`
-    }
-  }
-  return error instanceof Error ? error.message : String(error)
-}
-
 function formatFps(fps: number | undefined): string {
   return fps === undefined ? '—' : `${fps.toFixed(1)} fps`
 }
@@ -105,21 +87,14 @@ function CameraTest() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [measuredFps, setMeasuredFps] = useState<number | undefined>(undefined)
+
+  const measuredFps = useMeasuredFps(videoRef, stream)
+  useStreamPreview(videoRef, stream, setError)
 
   async function start() {
     setError(null)
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: 'environment',
-          frameRate: { ideal: 60 },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-      })
-      setStream(newStream)
+      setStream(await openCamera())
     } catch (err) {
       setError(describeCameraError(err))
     }
@@ -127,47 +102,7 @@ function CameraTest() {
 
   function stop() {
     setStream(null)
-    setMeasuredFps(undefined)
   }
-
-  // Conecta el stream al <video> y apaga la cámara al detener o desmontar.
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video || !stream) return
-    video.srcObject = stream
-    // Safari iOS no siempre respeta autoPlay con srcObject: hay que llamar a play().
-    // React no refleja `muted` como atributo, así que se fija aquí también.
-    video.muted = true
-    video.play().catch((err: unknown) => {
-      // AbortError: se detuvo la cámara antes de empezar a reproducir.
-      if (err instanceof DOMException && err.name === 'AbortError') return
-      setError(`No se pudo mostrar la cámara: ${err instanceof Error ? err.message : String(err)}`)
-    })
-    return () => {
-      video.srcObject = null
-      for (const track of stream.getTracks()) track.stop()
-    }
-  }, [stream])
-
-  // Mide los frames que llegan realmente, en ventanas de ~1 s.
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video || !stream || !('requestVideoFrameCallback' in video)) return
-    let handle = 0
-    let windowStart: { time: number; frames: number } | null = null
-    const onFrame = (now: number, metadata: VideoFrameCallbackMetadata) => {
-      if (windowStart === null) {
-        windowStart = { time: now, frames: metadata.presentedFrames }
-      } else if (now - windowStart.time >= 1000) {
-        const frames = metadata.presentedFrames - windowStart.frames
-        setMeasuredFps((frames * 1000) / (now - windowStart.time))
-        windowStart = { time: now, frames: metadata.presentedFrames }
-      }
-      handle = video.requestVideoFrameCallback(onFrame)
-    }
-    handle = video.requestVideoFrameCallback(onFrame)
-    return () => video.cancelVideoFrameCallback(handle)
-  }, [stream])
 
   const track = stream?.getVideoTracks()[0]
   const settings = track?.getSettings()

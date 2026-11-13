@@ -5,19 +5,10 @@ import { useEffect, useRef, useState } from 'react'
 import { isFragmented, listTopLevelBoxes } from '../video/boxes.ts'
 import { blobByteSource, demuxVideo } from '../video/demux.ts'
 import { codecLabel, FrameSource } from '../video/frameSource.ts'
+import { createRecorder, pickRecorderMimeType, recordingExtension } from './camera.ts'
 import { formatFps, formatInteger, formatMs, formatSeconds } from './format.ts'
 
 const DURATION_S = 5
-/** Formatos por orden de preferencia: la app lee MP4/MOV; WebM solo como último recurso. */
-const MIME_TYPES = [
-  'video/mp4;codecs=avc1.640028',
-  'video/mp4;codecs=avc1',
-  'video/mp4',
-  'video/webm;codecs=vp9',
-  'video/webm',
-]
-/** Bitrate alto para no perder detalle (el corredor puede ser pequeño en la imagen). */
-const VIDEO_BITS_PER_SECOND = 16_000_000
 /** Si se leen menos segundos que esta fracción de lo grabado, la lectura está incompleta. */
 const PARTIAL_READ = 0.9
 
@@ -49,11 +40,6 @@ type State =
   | { status: 'checking' }
   | { status: 'done'; blob: Blob; report: Report }
   | { status: 'error'; message: string }
-
-function pickMimeType(): string | null {
-  if (typeof MediaRecorder === 'undefined') return null
-  return MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type)) ?? ''
-}
 
 function errorText(error: unknown): string {
   return error instanceof Error ? `${error.name}: ${error.message}` : String(error)
@@ -123,17 +109,14 @@ export function RecordingTest({ stream }: { stream: MediaStream }) {
   )
 
   function record() {
-    const mimeType = pickMimeType()
+    const mimeType = pickRecorderMimeType()
     if (mimeType === null) {
       setState({ status: 'error', message: 'Este navegador no tiene MediaRecorder.' })
       return
     }
     let recorder: MediaRecorder
     try {
-      recorder = new MediaRecorder(stream, {
-        ...(mimeType ? { mimeType } : {}),
-        videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
-      })
+      recorder = createRecorder(stream, mimeType)
     } catch (error) {
       setState({ status: 'error', message: `No se pudo crear el grabador: ${errorText(error)}` })
       return
@@ -257,7 +240,7 @@ function RecordingReport({ blob, report }: { blob: Blob; report: Report }) {
 /** Guarda la grabación en el dispositivo (hoja de compartir en el iPhone, descarga en el PC). */
 function SaveButton({ blob }: { blob: Blob }) {
   async function save() {
-    const extension = blob.type.includes('webm') ? 'webm' : 'mp4'
+    const extension = recordingExtension(blob.type)
     const name = `prueba-grabacion-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.${extension}`
     const file = new File([blob], name, { type: blob.type })
     if (navigator.canShare?.({ files: [file] })) {
