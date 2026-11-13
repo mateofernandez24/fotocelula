@@ -1,5 +1,6 @@
-// Lectura del contenedor MP4/MOV con mp4box.js. Solo lee el índice (moov): los datos
-// de cada frame se leen después, bajo demanda, a partir de su posición en el archivo.
+// Lectura del contenedor MP4/MOV con mp4box.js. Solo lee el índice (moov y, en un MP4
+// fragmentado, cada moof): los datos de cada frame se leen después, bajo demanda, a partir
+// de su posición en el archivo.
 // No usa APIs del DOM, así que funciona también en Node (tests) y en un Web Worker.
 import {
   DataStream,
@@ -11,6 +12,7 @@ import {
   type Movie,
   type VisualSampleEntry,
 } from 'mp4box'
+import { isFragmented, listTopLevelBoxes, type BoxHeader } from './boxes.ts'
 import { frameTimingStats, type FrameTimingStats } from './fps.ts'
 import {
   buildFrameTable,
@@ -25,6 +27,10 @@ import {
 // caja de relleno de QuickTime). Es inofensivo: no llega a onError ni corta la lectura.
 
 const CHUNK_SIZE = 1 << 20
+/** Bytes de cabecera de una caja (tamaño de 64 bits incluido). */
+const BOX_HEADER = 16
+/** En un MP4 fragmentado, cajas mayores que esto (salvo moov/moof) se leen solo por la cabecera. */
+const MAX_INDEX_BOX = 4 << 20
 /** Cajas con la configuración del decodificador, en el formato que espera VideoDecoder. */
 const DESCRIPTION_BOXES = ['avcC', 'hvcC', 'vpcC', 'av1C']
 /** A partir de estos fps el vídeo se ha grabado a alta velocidad (cámara lenta). */
@@ -93,13 +99,18 @@ export async function demuxVideo(source: ByteSource): Promise<DemuxedVideo> {
     state.error = message
   }
 
-  let position = 0
-  while (!state.movie && !state.error && position < source.size) {
-    const length = Math.min(CHUNK_SIZE, source.size - position)
-    const buffer = MP4BoxBuffer.fromArrayBuffer(await source.read(position, length), position)
-    const next = file.appendBuffer(buffer, position + length >= source.size)
-    // appendBuffer devuelve dónde seguir leyendo (salta el mdat si el moov va al final).
-    position = next > position ? next : position + length
+  const boxes = await listTopLevelBoxes(source)
+  if (isFragmented(boxes)) {
+    await appendFragmentedIndex(file, source, boxes)
+  } else {
+    let position = 0
+    while (!state.movie && !state.error && position < source.size) {
+      const length = Math.min(CHUNK_SIZE, source.size - position)
+      const buffer = MP4BoxBuffer.fromArrayBuffer(await source.read(position, length), position)
+      const next = file.appendBuffer(buffer, position + length >= source.size)
+      // appendBuffer devuelve dónde seguir leyendo (salta el mdat si el moov va al final).
+      position = next > position ? next : position + length
+    }
   }
 
   if (state.error) {
@@ -181,6 +192,20 @@ export async function demuxVideo(source: ByteSource): Promise<DemuxedVideo> {
       model: stringOrNull(metadata.get('com.apple.quicktime.model')),
       software: stringOrNull(metadata.get('com.apple.quicktime.software')),
     },
+  }
+}
+
+/**
+ * MP4 fragmentado (como los que genera MediaRecorder): el moov no lista las muestras, que
+ * van en cada moof. Se le pasan a mp4box todas las cajas salvo los datos (mdat, de los que
+ * basta la cabecera para saltarlos), cada una en su posición del archivo.
+ */
+async function appendFragmentedIndex(file: ISOFile, source: ByteSource, boxes: readonly BoxHeader[]) {
+  for (const [i, box] of boxes.entries()) {
+    const whole = box.type === 'moov' || box.type === 'moof' || (box.type !== 'mdat' && box.size <= MAX_INDEX_BOX)
+    const length = Math.min(whole ? box.size : BOX_HEADER, source.size - box.offset)
+    const buffer = MP4BoxBuffer.fromArrayBuffer(await source.read(box.offset, length), box.offset)
+    file.appendBuffer(buffer, i === boxes.length - 1)
   }
 }
 

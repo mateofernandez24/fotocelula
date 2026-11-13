@@ -94,3 +94,48 @@ describe.skipIf(!existsSync(IPHONE_60FPS))('demuxVideo con un vídeo del iPhone'
     }
   })
 })
+
+// Grabación sintética de MediaRecorder en Chromium (lienzo de colores con el número de frame,
+// 320 × 180, ~3 s a 60 fps): MP4 fragmentado con 8 moof. Sí está en el repositorio.
+const FRAGMENTED = 'src/video/fixtures/mediarecorder-chromium-fragmented.mp4'
+
+describe('demuxVideo con un MP4 fragmentado (MediaRecorder)', () => {
+  it('lee las muestras de todos los fragmentos, no solo del primero', async () => {
+    const source = await fileByteSource(FRAGMENTED)
+    try {
+      const video = await demuxVideo(source)
+      expect(video.codec).toMatch(/^avc1\./)
+      expect([video.displayWidth, video.displayHeight]).toEqual([320, 180])
+      expect(video.samples).toHaveLength(163)
+      expect(video.frames).toHaveLength(163)
+      // Los timestamps son los reales de la grabación: crecientes y abarcando ~3 s.
+      const times = video.frames.map((f) => f.timestampS)
+      expect(times.every((t, i) => i === 0 || t > (times[i - 1] ?? 0))).toBe(true)
+      expect(video.timing.spanS).toBeGreaterThan(2.5)
+      // Cada muestra cae dentro de un mdat del archivo.
+      const last = video.samples.at(-1)
+      expect((last?.offset ?? 0) + (last?.size ?? 0)).toBeLessThanOrEqual(source.size)
+      expect(video.samples[0]?.isKeyframe).toBe(true)
+    } finally {
+      await source.close()
+    }
+  })
+
+  it('no lee los datos de los frames (mdat), solo el índice', async () => {
+    const source = await fileByteSource(FRAGMENTED)
+    let bytesRead = 0
+    const counting: ByteSource = {
+      size: source.size,
+      read: (offset, length) => {
+        bytesRead += length
+        return source.read(offset, length)
+      },
+    }
+    try {
+      await demuxVideo(counting)
+      expect(bytesRead).toBeLessThan(source.size * 0.05)
+    } finally {
+      await source.close()
+    }
+  })
+})

@@ -10,8 +10,11 @@ export interface BoxHeader {
   size: number
 }
 
-/** Por si el archivo está dañado: no se leen más cabeceras que estas. */
-const MAX_BOXES = 10_000
+/**
+ * Por si el archivo está dañado: no se leen más cabeceras que estas. Una grabación de
+ * MediaRecorder en Chrome tiene un par de cajas (moof + mdat) cada pocas décimas de segundo.
+ */
+const MAX_BOXES = 200_000
 
 export async function listTopLevelBoxes(source: ByteSource, maxBoxes = MAX_BOXES): Promise<BoxHeader[]> {
   const boxes: BoxHeader[] = []
