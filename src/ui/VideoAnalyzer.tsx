@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { computeCourse, type ManualPair } from '../timing/course.ts'
-import type { Gate } from '../timing/geometry.ts'
+import { gateNormal, type Gate } from '../timing/geometry.ts'
+import { instantSpeeds } from '../timing/instantSpeed.ts'
 import { extrapolationFactor, gateDistances, metersPerUnit, type ScaleReference } from '../timing/scale.ts'
 import { torsoPoint, torsoTrack } from '../timing/torso.ts'
 import { blobByteSource, demuxVideo, VideoFormatError, type DemuxedVideo } from '../video/demux.ts'
@@ -11,6 +12,7 @@ import { GateLayer } from './GateLayer.tsx'
 import { addGate, defaultGates, defaultReferenceBars, removeGate } from './gates.ts'
 import { GatesPanel } from './GatesPanel.tsx'
 import { Recorder } from './Recorder.tsx'
+import { ReplayPlayer } from './ReplayPlayer.tsx'
 import { saveFile } from './saveFile.ts'
 import { ReferencePanel } from './ReferencePanel.tsx'
 import { PoseAnalysisPanel } from './PoseAnalysisPanel.tsx'
@@ -241,6 +243,7 @@ function LoadedVideo({ file, video, frames, step, reachable, onReachableChange, 
     [analysis.poses],
   )
   const [frameIndex, setFrameIndex] = useState(0)
+  const [replayIndex, setReplayIndex] = useState(0)
   const [reference, setReference] = useState<ScaleReference>(() => ({
     bars: defaultReferenceBars(),
     distanceM: null,
@@ -276,6 +279,17 @@ function LoadedVideo({ file, video, frames, step, reachable, onReachableChange, 
   const course = useMemo(
     () => (track && placingGates ? computeCourse(track, gates, distances, manual, { aspect }) : null),
     [track, placingGates, gates, distances, manual, aspect],
+  )
+
+  // Velocidad instantánea aproximada (para el marcador de la repetición), solo en la
+  // dirección en que se cruzan las puertas.
+  const firstGate = gates[0]
+  const speeds = useMemo(
+    () =>
+      track && scale !== null && firstGate
+        ? instantSpeeds(track, { aspect, scale, axis: gateNormal(firstGate, aspect) })
+        : null,
+    [track, scale, firstGate, aspect],
   )
 
   // Aviso en el visor si en este frame (o justo después) se cruza una puerta.
@@ -367,6 +381,18 @@ function LoadedVideo({ file, video, frames, step, reachable, onReachableChange, 
           onAdd={() => changeGateCount(addGate(gates))}
           onRemove={(index) => changeGateCount(removeGate(gates, index))}
           onUseReference={() => changeGateCount(reference.bars.map((bar) => ({ a: { ...bar.a }, b: { ...bar.b } })))}
+        />
+      )}
+      {placingGates && course && speeds && (
+        <ReplayPlayer
+          source={frames}
+          poses={analysis.poses}
+          torso={torso}
+          gates={gates}
+          course={course}
+          speeds={speeds}
+          index={replayIndex}
+          onIndexChange={setReplayIndex}
         />
       )}
       {placingGates && (
