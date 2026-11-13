@@ -22,7 +22,7 @@ interface GatesPanelProps {
 export function GatesPanel({ gates, distances, extrapolation, onAdd, onRemove, onUseReference }: GatesPanelProps) {
   return (
     <section className="card">
-      <h2>2. Puertas</h2>
+      <h2>Puertas</h2>
       <p className="note">
         Arrastra las líneas amarillas al inicio y al final del tramo que quieres medir (y a los puntos
         intermedios, si añades más). La distancia entre ellas se calcula con la referencia. Mueve los

@@ -33,8 +33,8 @@ function App() {
         </div>
         {view === 'result' && (
           <EmptyState icon={<FlagIcon />} title="Resultado">
-            Aquí verás la repetición con la velocidad en cada puerta. De momento, el resultado aparece al
-            final de <strong>Medir</strong>.
+            Aquí verás la repetición con la velocidad en cada puerta. De momento, el resultado aparece en el
+            último paso de <strong>Medir</strong> (Puertas).
           </EmptyState>
         )}
         {view === 'history' && (

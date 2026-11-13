@@ -132,6 +132,102 @@ h2 {
   opacity: 0.35;
 }
 
+/* Indicador de pasos de «Medir». */
+.stepper-bar {
+  margin: 0 0 16px;
+}
+
+.stepper-bar ol {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  position: relative;
+}
+
+/* Línea que une cada paso con el siguiente. */
+.step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 17px;
+  left: calc(50% + 20px);
+  right: calc(-50% + 20px);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--border);
+}
+
+.step.done:not(:last-child)::after {
+  background: var(--accent);
+}
+
+.step button {
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+}
+
+.step button:disabled {
+  opacity: 0.45;
+}
+
+.step-number {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--muted);
+  background: var(--card);
+  border: 2px solid var(--border);
+}
+
+.step.current .step-number {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 18px rgba(43, 255, 136, 0.35);
+}
+
+.step.done .step-number {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.step.current .step-label {
+  color: var(--text-h);
+}
+
+/* Atrás / Siguiente al final de cada paso (no fijos: taparían el visor al arrastrar las puertas). */
+.step-nav {
+  margin-top: 8px;
+}
+
+.step-nav-buttons {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+}
+
+.step-nav-hint {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+}
+
 .empty-state {
   display: grid;
   justify-items: center;
@@ -189,7 +285,7 @@ h2 {
 .viewer canvas {
   display: block;
   max-width: 100%;
-  max-height: 70vh;
+  max-height: 58vh;
   margin: 0 auto;
   border-radius: 8px;
   background: #000;

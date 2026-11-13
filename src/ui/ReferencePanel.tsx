@@ -1,40 +1,18 @@
 import { useState } from 'react'
 import type { ScaleReference } from '../timing/scale.ts'
-import { formatMeters } from './format.ts'
 import { parseDistance } from './gates.ts'
 
 interface ReferencePanelProps {
   reference: ScaleReference
   /** Metros por alto de imagen (null si la referencia aún no vale). */
   scale: number | null
-  /** true mientras se colocan las barras; false cuando ya se están colocando las puertas. */
-  editing: boolean
   onDistanceChange: (distanceM: number | null) => void
-  onDone: () => void
-  onEdit: () => void
 }
 
-export function ReferencePanel({ reference, scale, editing, onDistanceChange, onDone, onEdit }: ReferencePanelProps) {
-  if (!editing) {
-    return (
-      <section className="card">
-        <div className="step-summary">
-          <h2>1. Referencia</h2>
-          <button type="button" className="secondary small" onClick={onEdit}>
-            Cambiar
-          </button>
-        </div>
-        <p className="note">
-          Barras azules a {reference.distanceM === null ? '—' : formatMeters(reference.distanceM)} entre sí. Con ellas
-          se calcula la distancia entre las puertas.
-        </p>
-      </section>
-    )
-  }
-
+export function ReferencePanel({ reference, scale, onDistanceChange }: ReferencePanelProps) {
   return (
     <section className="card">
-      <h2>1. Referencia</h2>
+      <h2>Referencia</h2>
       <p className="note">
         Arrastra las dos barras azules sobre los extremos de algo cuya longitud conozcas y que esté{' '}
         <strong>en el plano por el que pasa el deportista</strong>: una cinta métrica en su recorrido, dos
@@ -45,9 +23,6 @@ export function ReferencePanel({ reference, scale, editing, onDistanceChange, on
       {reference.distanceM !== null && scale === null && (
         <p className="error">Las barras están demasiado juntas: sepáralas sobre los extremos de la referencia.</p>
       )}
-      <button type="button" disabled={scale === null} onClick={onDone}>
-        Siguiente: colocar las puertas
-      </button>
     </section>
   )
 }

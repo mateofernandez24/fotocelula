@@ -15,6 +15,8 @@ import { saveFile } from './saveFile.ts'
 import { ReferencePanel } from './ReferencePanel.tsx'
 import { PoseAnalysisPanel } from './PoseAnalysisPanel.tsx'
 import { ResultsPanel } from './ResultsPanel.tsx'
+import { clampStep, type StepId } from './steps.ts'
+import { StepNav, Stepper } from './Stepper.tsx'
 import { usePoseAnalysis } from './usePoseAnalysis.ts'
 import { VideoInfo } from './VideoInfo.tsx'
 
@@ -44,6 +46,9 @@ function errorMessage(error: unknown): string {
 export function VideoAnalyzer() {
   const [state, setState] = useState<State>({ status: 'empty' })
   const [recording, setRecording] = useState(false)
+  // Paso de «Medir» y último paso al que se puede ir (lo decide el vídeo cargado).
+  const [step, setStep] = useState<StepId>('video')
+  const [reachable, setReachable] = useState<StepId>('video')
   // Grabación que aún no se ha guardado en el dispositivo: se perdería al cargar otro vídeo.
   const [unsaved, setUnsaved] = useState<File | null>(null)
   const loadId = useRef(0)
@@ -72,6 +77,8 @@ export function VideoAnalyzer() {
     const id = ++loadId.current
     setUnsaved(recorded ? file : null)
     setState({ status: 'loading', fileName: file.name })
+    setStep('video')
+    setReachable('video')
     try {
       // El vídeo se lee directamente del archivo local: nunca se sube a ningún sitio.
       const bytes = blobByteSource(file)
@@ -94,6 +101,14 @@ export function VideoAnalyzer() {
     }
   }
 
+  const ready = state.status === 'ready' && state.frames !== null
+  const current = ready ? clampStep(step, reachable) : 'video'
+
+  function goTo(next: StepId) {
+    setStep(next)
+    window.scrollTo({ top: 0 })
+  }
+
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     // Permite volver a elegir el mismo archivo.
@@ -103,40 +118,44 @@ export function VideoAnalyzer() {
 
   return (
     <>
-      <section className="card">
-        <h2>Vídeo</h2>
-        <p className="note">
-          Importa un vídeo de la galería o grábalo con la cámara. Se analiza en tu dispositivo: no
-          se sube a ningún sitio.
-        </p>
-        <div className="buttons">
-          <label
-            className={`button${recording ? ' disabled' : ''}`}
-            onClick={(event) => {
-              // El clic en la etiqueta se reenvía al input y vuelve a llegar aquí: solo se pregunta una vez.
-              if (event.target !== event.currentTarget) return
-              if (!confirmDiscard()) event.preventDefault()
-            }}
-          >
-            {state.status === 'empty' ? 'Importar vídeo' : 'Importar otro vídeo'}
-            <input type="file" accept="video/*" className="visually-hidden" onChange={onFileChange} />
-          </label>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => confirmDiscard() && setRecording(true)}
-            disabled={recording}
-          >
-            Grabar vídeo
-          </button>
-        </div>
-        {state.status === 'loading' && <p className="note">Leyendo {state.fileName}…</p>}
-        {state.status === 'error' && (
-          <p className="error">
-            {state.fileName}: {state.message}
+      <Stepper current={current} reachable={ready ? reachable : 'video'} disabled={recording} onSelect={goTo} />
+
+      {current === 'video' && (
+        <section className="card">
+          <h2>Vídeo</h2>
+          <p className="note">
+            Importa un vídeo de la galería o grábalo con la cámara. Se analiza en tu dispositivo: no
+            se sube a ningún sitio.
           </p>
-        )}
-      </section>
+          <div className="buttons">
+            <label
+              className={`button${recording ? ' disabled' : ''}`}
+              onClick={(event) => {
+                // El clic en la etiqueta se reenvía al input y vuelve a llegar aquí: solo se pregunta una vez.
+                if (event.target !== event.currentTarget) return
+                if (!confirmDiscard()) event.preventDefault()
+              }}
+            >
+              {state.status === 'empty' ? 'Importar vídeo' : 'Importar otro vídeo'}
+              <input type="file" accept="video/*" className="visually-hidden" onChange={onFileChange} />
+            </label>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => confirmDiscard() && setRecording(true)}
+              disabled={recording}
+            >
+              Grabar vídeo
+            </button>
+          </div>
+          {state.status === 'loading' && <p className="note">Leyendo {state.fileName}…</p>}
+          {state.status === 'error' && (
+            <p className="error">
+              {state.fileName}: {state.message}
+            </p>
+          )}
+        </section>
+      )}
 
       {recording && (
         <Recorder
@@ -151,13 +170,24 @@ export function VideoAnalyzer() {
       {/* Mientras se graba, el vídeo anterior se oculta pero no se pierde (por si se cancela). */}
       {state.status === 'ready' && (
         <div hidden={recording}>
-          <VideoInfo fileName={state.fileName} video={state.video}>
-            {state.recorded && (
-              <RecordingSave file={state.file} saved={unsaved !== state.file} onSaved={() => setUnsaved(null)} />
-            )}
-          </VideoInfo>
+          {current === 'video' && (
+            <VideoInfo fileName={state.fileName} video={state.video}>
+              {state.recorded && (
+                <RecordingSave file={state.file} saved={unsaved !== state.file} onSaved={() => setUnsaved(null)} />
+              )}
+            </VideoInfo>
+          )}
           {state.frames ? (
-            <LoadedVideo key={state.id} file={state.file} video={state.video} frames={state.frames} />
+            <LoadedVideo
+              key={state.id}
+              file={state.file}
+              video={state.video}
+              frames={state.frames}
+              step={current}
+              reachable={reachable}
+              onReachableChange={setReachable}
+              onStepChange={goTo}
+            />
           ) : (
             <section className="card">
               <h2>Frames</h2>
@@ -196,10 +226,14 @@ interface LoadedVideoProps {
   file: File
   video: DemuxedVideo
   frames: FrameSource
+  step: StepId
+  reachable: StepId
+  onReachableChange: (step: StepId) => void
+  onStepChange: (step: StepId) => void
 }
 
 /** Análisis de movimiento y visor de un vídeo ya cargado (uno por vídeo: se reinicia al cambiar). */
-function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
+function LoadedVideo({ file, video, frames, step, reachable, onReachableChange, onStepChange }: LoadedVideoProps) {
   const analysis = usePoseAnalysis(file, video.frames.length)
   // null: sin torso en ese frame; undefined: aún sin analizar.
   const torso = useMemo(
@@ -207,8 +241,6 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
     [analysis.poses],
   )
   const [frameIndex, setFrameIndex] = useState(0)
-  // Primero se coloca la referencia (barras azules y su distancia); después, las puertas.
-  const [step, setStep] = useState<'reference' | 'gates'>('reference')
   const [reference, setReference] = useState<ScaleReference>(() => ({
     bars: defaultReferenceBars(),
     distanceM: null,
@@ -222,6 +254,20 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
   const scale = useMemo(() => metersPerUnit(reference, aspect), [reference, aspect])
   const distances = useMemo(() => gateDistances(gates, scale, aspect), [gates, scale, aspect])
   const placingGates = step === 'gates' && scale !== null
+
+  // Hasta dónde se puede avanzar: la referencia se puede colocar mientras se analiza el
+  // movimiento; las puertas, cuando la referencia da una escala.
+  const analysisStarted = analysis.state.status === 'running' || analysis.state.status === 'done'
+  const canReach: StepId = !analysisStarted ? 'motion' : scale === null ? 'reference' : 'gates'
+  useEffect(() => onReachableChange(canReach), [canReach, onReachableChange])
+  const blockedReason =
+    step === 'motion'
+      ? 'Analiza el movimiento para continuar.'
+      : step === 'reference'
+        ? reference.distanceM === null
+          ? 'Escribe la distancia de la referencia para continuar.'
+          : 'Separa las barras de la referencia para continuar.'
+        : null
 
   // Los cruces se calculan con el análisis completo (no a medias) y se recalculan al mover
   // las puertas o la referencia, o al marcar cruces a mano.
@@ -255,14 +301,16 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
 
   const overlay = (
     <>
-      <GateLayer
-        label="Referencia"
-        variant="reference"
-        gates={reference.bars}
-        labels={['A', 'B']}
-        spanLabels={[reference.distanceM === null ? '? m' : formatMeters(reference.distanceM)]}
-        onChange={placingGates ? undefined : moveReferenceBars}
-      />
+      {(step === 'reference' || placingGates) && (
+        <GateLayer
+          label="Referencia"
+          variant="reference"
+          gates={reference.bars}
+          labels={['A', 'B']}
+          spanLabels={[reference.distanceM === null ? '? m' : formatMeters(reference.distanceM)]}
+          onChange={placingGates ? undefined : moveReferenceBars}
+        />
+      )}
       {placingGates && (
         <GateLayer
           label="Puertas"
@@ -285,14 +333,6 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
 
   return (
     <>
-      <PoseAnalysisPanel
-        fileName={file.name}
-        video={video}
-        state={analysis.state}
-        torso={torso}
-        onStart={analysis.start}
-        onCancel={analysis.cancel}
-      />
       <FrameViewer
         source={frames}
         index={frameIndex}
@@ -302,14 +342,23 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
         torso={torso}
         overlay={overlay}
       />
-      <ReferencePanel
-        reference={reference}
-        scale={scale}
-        editing={!placingGates}
-        onDistanceChange={(distanceM) => setReference((r) => ({ ...r, distanceM }))}
-        onDone={() => setStep('gates')}
-        onEdit={() => setStep('reference')}
-      />
+      {step === 'motion' && (
+        <PoseAnalysisPanel
+          fileName={file.name}
+          video={video}
+          state={analysis.state}
+          torso={torso}
+          onStart={analysis.start}
+          onCancel={analysis.cancel}
+        />
+      )}
+      {step === 'reference' && (
+        <ReferencePanel
+          reference={reference}
+          scale={scale}
+          onDistanceChange={(distanceM) => setReference((r) => ({ ...r, distanceM }))}
+        />
+      )}
       {placingGates && (
         <GatesPanel
           gates={gates}
@@ -335,6 +384,7 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
           onAutomatic={(gateIndex) => setManualPair(gateIndex, null)}
         />
       )}
+      <StepNav current={step} reachable={reachable} onSelect={onStepChange} blockedReason={blockedReason} />
     </>
   )
 }
