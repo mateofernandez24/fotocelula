@@ -651,6 +651,12 @@ button.stop-button {
   background: #c0362c;
 }
 
+.recording-save {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
 .recording-test {
   margin-top: 16px;
 }

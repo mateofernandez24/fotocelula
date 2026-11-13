@@ -6,6 +6,7 @@ import { isFragmented, listTopLevelBoxes } from '../video/boxes.ts'
 import { blobByteSource, demuxVideo } from '../video/demux.ts'
 import { codecLabel, FrameSource } from '../video/frameSource.ts'
 import { createRecorder, pickRecorderMimeType, recordingExtension } from './camera.ts'
+import { saveFile } from './saveFile.ts'
 import { formatFps, formatInteger, formatMs, formatSeconds } from './format.ts'
 
 const DURATION_S = 5
@@ -239,29 +240,14 @@ function RecordingReport({ blob, report }: { blob: Blob; report: Report }) {
 
 /** Guarda la grabación en el dispositivo (hoja de compartir en el iPhone, descarga en el PC). */
 function SaveButton({ blob }: { blob: Blob }) {
-  async function save() {
+  function save() {
     const extension = recordingExtension(blob.type)
     const name = `prueba-grabacion-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.${extension}`
-    const file = new File([blob], name, { type: blob.type })
-    if (navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file] })
-        return
-      } catch (error) {
-        // El usuario cerró la hoja de compartir: no es un error.
-        if (error instanceof DOMException && error.name === 'AbortError') return
-      }
-    }
-    const url = URL.createObjectURL(file)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = name
-    link.click()
-    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    void saveFile(new File([blob], name, { type: blob.type }))
   }
 
   return (
-    <button type="button" className="secondary" onClick={() => void save()}>
+    <button type="button" className="secondary" onClick={save}>
       Guardar vídeo
     </button>
   )

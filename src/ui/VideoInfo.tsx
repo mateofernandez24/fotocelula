@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { DemuxedVideo } from '../video/demux.ts'
 import { codecLabel } from '../video/frameSource.ts'
 import { formatFps, formatInteger, formatMs, formatSeconds } from './format.ts'
@@ -6,9 +7,11 @@ import { videoWarnings } from './videoWarnings.ts'
 interface VideoInfoProps {
   fileName: string
   video: DemuxedVideo
+  /** Contenido extra al final de la ficha (p. ej. guardar una grabación). */
+  children?: ReactNode
 }
 
-export function VideoInfo({ fileName, video }: VideoInfoProps) {
+export function VideoInfo({ fileName, video, children }: VideoInfoProps) {
   const { timing, device } = video
   const warnings = videoWarnings(video)
   const nominal = timing.nominalFps === null ? '' : ` (≈ ${formatInteger(Math.round(timing.nominalFps))})`
@@ -62,6 +65,7 @@ export function VideoInfo({ fileName, video }: VideoInfoProps) {
         {formatMs(timing.gateErrorS * 2)}. Al detectar el cruce se reducirá interpolando entre
         frames.
       </p>
+      {children}
     </section>
   )
 }

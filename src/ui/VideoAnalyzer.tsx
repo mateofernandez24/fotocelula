@@ -11,6 +11,7 @@ import { GateLayer } from './GateLayer.tsx'
 import { addGate, defaultGates, defaultReferenceBars, removeGate } from './gates.ts'
 import { GatesPanel } from './GatesPanel.tsx'
 import { Recorder } from './Recorder.tsx'
+import { saveFile } from './saveFile.ts'
 import { ReferencePanel } from './ReferencePanel.tsx'
 import { PoseAnalysisPanel } from './PoseAnalysisPanel.tsx'
 import { ResultsPanel } from './ResultsPanel.tsx'
@@ -26,6 +27,8 @@ type State =
       id: number
       file: File
       fileName: string
+      /** Grabado desde la web (solo existe en la memoria de la página hasta que se guarda). */
+      recorded: boolean
       video: DemuxedVideo
       /** null si el navegador no puede decodificar este vídeo. */
       frames: FrameSource | null
@@ -41,14 +44,33 @@ function errorMessage(error: unknown): string {
 export function VideoAnalyzer() {
   const [state, setState] = useState<State>({ status: 'empty' })
   const [recording, setRecording] = useState(false)
+  // Grabación que aún no se ha guardado en el dispositivo: se perdería al cargar otro vídeo.
+  const [unsaved, setUnsaved] = useState<File | null>(null)
   const loadId = useRef(0)
 
   // Libera el decodificador al cambiar de vídeo o salir de la pantalla.
   const frames = state.status === 'ready' ? state.frames : null
   useEffect(() => () => frames?.close(), [frames])
 
-  async function load(file: File) {
+  // Al cerrar o recargar la página con una grabación sin guardar, el navegador pregunta antes.
+  useEffect(() => {
+    if (!unsaved) return
+    const onBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [unsaved])
+
+  /** true si no hay grabación sin guardar o el usuario acepta descartarla. */
+  function confirmDiscard(): boolean {
+    return (
+      !unsaved ||
+      window.confirm(`La grabación «${unsaved.name}» no se ha guardado y se perderá. ¿Quieres continuar?`)
+    )
+  }
+
+  async function load(file: File, recorded = false) {
     const id = ++loadId.current
+    setUnsaved(recorded ? file : null)
     setState({ status: 'loading', fileName: file.name })
     try {
       // El vídeo se lee directamente del archivo local: nunca se sube a ningún sitio.
@@ -65,7 +87,7 @@ export function VideoAnalyzer() {
         frameSource?.close()
         return
       }
-      setState({ status: 'ready', id, file, fileName: file.name, video, frames: frameSource, decodeError })
+      setState({ status: 'ready', id, file, fileName: file.name, recorded, video, frames: frameSource, decodeError })
     } catch (error) {
       if (id !== loadId.current) return
       setState({ status: 'error', fileName: file.name, message: errorMessage(error) })
@@ -88,11 +110,23 @@ export function VideoAnalyzer() {
           se sube a ningún sitio.
         </p>
         <div className="buttons">
-          <label className={`button${recording ? ' disabled' : ''}`}>
+          <label
+            className={`button${recording ? ' disabled' : ''}`}
+            onClick={(event) => {
+              // El clic en la etiqueta se reenvía al input y vuelve a llegar aquí: solo se pregunta una vez.
+              if (event.target !== event.currentTarget) return
+              if (!confirmDiscard()) event.preventDefault()
+            }}
+          >
             {state.status === 'empty' ? 'Importar vídeo' : 'Importar otro vídeo'}
             <input type="file" accept="video/*" className="visually-hidden" onChange={onFileChange} />
           </label>
-          <button type="button" className="secondary" onClick={() => setRecording(true)} disabled={recording}>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => confirmDiscard() && setRecording(true)}
+            disabled={recording}
+          >
             Grabar vídeo
           </button>
         </div>
@@ -108,7 +142,7 @@ export function VideoAnalyzer() {
         <Recorder
           onRecorded={(file) => {
             setRecording(false)
-            void load(file)
+            void load(file, true)
           }}
           onClose={() => setRecording(false)}
         />
@@ -117,7 +151,11 @@ export function VideoAnalyzer() {
       {/* Mientras se graba, el vídeo anterior se oculta pero no se pierde (por si se cancela). */}
       {state.status === 'ready' && (
         <div hidden={recording}>
-          <VideoInfo fileName={state.fileName} video={state.video} />
+          <VideoInfo fileName={state.fileName} video={state.video}>
+            {state.recorded && (
+              <RecordingSave file={state.file} saved={unsaved !== state.file} onSaved={() => setUnsaved(null)} />
+            )}
+          </VideoInfo>
           {state.frames ? (
             <LoadedVideo key={state.id} file={state.file} video={state.video} frames={state.frames} />
           ) : (
@@ -129,6 +167,28 @@ export function VideoAnalyzer() {
         </div>
       )}
     </>
+  )
+}
+
+/** Guardar en el dispositivo un vídeo grabado desde la web. */
+function RecordingSave({ file, saved, onSaved }: { file: File; saved: boolean; onSaved: () => void }) {
+  async function save() {
+    if ((await saveFile(file)) !== 'cancelled') onSaved()
+  }
+
+  return (
+    <div className="recording-save">
+      <p className="note">
+        {saved
+          ? 'Grabación guardada.'
+          : 'Esta grabación solo está en la página: si no la guardas, se pierde al cerrarla o al cargar otro vídeo.'}{' '}
+        En el iPhone, «Guardar en Archivos» la conserva tal cual; para analizarla otra vez, impórtala desde
+        Archivos (desde Fotos, iOS puede convertirla a 30 fps).
+      </p>
+      <button type="button" className={saved ? 'secondary' : undefined} onClick={() => void save()}>
+        Guardar vídeo
+      </button>
+    </div>
   )
 }
 
