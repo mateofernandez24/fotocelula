@@ -32,3 +32,8 @@ export function formatFps(fps: number): string {
 export function formatInteger(value: number): string {
   return formatNumber(value, 0)
 }
+
+/** 2,00 m */
+export function formatMeters(meters: number): string {
+  return `${formatNumber(meters, 2)} m`
+}

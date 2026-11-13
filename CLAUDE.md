@@ -3,7 +3,10 @@
 ## Qué es
 Web app (PWA) que mide el tiempo y la velocidad de un deportista (corredor, jugador, etc.) entre dos o más "puertas virtuales" marcadas sobre un vídeo, sustituyendo a una fotocélula. El vídeo se graba desde la propia web o se importa desde la galería.
 
-Cálculo base: el usuario marca dos líneas en la imagen e introduce la distancia real entre ellas (metros). La app detecta el instante en que el torso del deportista cruza cada línea. Velocidad = distancia / (t2 - t1).
+Cálculo base:
+1. **Referencia:** el usuario coloca dos barras sobre los extremos de algo de longitud conocida en el plano por el que pasa el deportista (una cinta, dos conos…) e introduce esa distancia (metros). Eso da la escala de la imagen.
+2. **Puertas:** después coloca dos (o más) líneas donde empieza y termina el tramo que quiere medir. La distancia entre puertas **no se escribe**: se calcula con la escala de la referencia (`src/timing/scale.ts`).
+3. La app detecta el instante en que el torso del deportista cruza cada puerta. Velocidad = distancia / (t2 - t1).
 
 ## Restricción principal: coste cero
 - Sin cuentas de pago, sin App Store, sin servidores de pago.
@@ -36,7 +39,7 @@ Cálculo base: el usuario marca dos líneas en la imagen e introduce la distanci
   - Detección del cruce de cada puerta con **interpolación subfotograma** entre los dos frames que la rodean.
   - Tiempos, parciales y velocidad.
   - **Cubierto por tests unitarios (Vitest)**.
-- `src/ui/`: importar/grabar vídeo, marcar puertas sobre el vídeo, introducir distancia, resultados, ajuste manual, historial.
+- `src/ui/`: importar/grabar vídeo, colocar la referencia (barras y distancia) y las puertas sobre el vídeo, resultados, ajuste manual, historial.
 
 ## Reglas
 - **Usar siempre el timestamp real de cada frame. Nunca asumir fps constante.**

@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { computeCourse, type ManualPair } from '../timing/course.ts'
 import type { Gate } from '../timing/geometry.ts'
+import { extrapolationFactor, gateDistances, metersPerUnit, type ScaleReference } from '../timing/scale.ts'
 import { torsoPoint, torsoTrack } from '../timing/torso.ts'
 import { blobByteSource, demuxVideo, VideoFormatError, type DemuxedVideo } from '../video/demux.ts'
 import { FrameSource } from '../video/frameSource.ts'
 import { FrameViewer } from './FrameViewer.tsx'
-import { addGate, defaultGates, removeGate } from './gates.ts'
+import { formatMeters } from './format.ts'
+import { GateLayer } from './GateLayer.tsx'
+import { addGate, defaultGates, defaultReferenceBars, removeGate } from './gates.ts'
 import { GatesPanel } from './GatesPanel.tsx'
+import { ReferencePanel } from './ReferencePanel.tsx'
 import { PoseAnalysisPanel } from './PoseAnalysisPanel.tsx'
 import { ResultsPanel } from './ResultsPanel.tsx'
 import { usePoseAnalysis } from './usePoseAnalysis.ts'
@@ -125,22 +129,29 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
     [analysis.poses],
   )
   const [frameIndex, setFrameIndex] = useState(0)
+  // Primero se coloca la referencia (barras azules y su distancia); después, las puertas.
+  const [step, setStep] = useState<'reference' | 'gates'>('reference')
+  const [reference, setReference] = useState<ScaleReference>(() => ({
+    bars: defaultReferenceBars(),
+    distanceM: null,
+  }))
   const [gates, setGates] = useState<Gate[]>(defaultGates)
-  // Una distancia por cada par de puertas consecutivas.
-  const [distances, setDistances] = useState<(number | null)[]>([null])
   // Cruces marcados a mano, por índice de puerta.
   const [manual, setManual] = useState<ReadonlyMap<number, ManualPair>>(() => new Map())
 
+  const aspect = video.displayWidth / video.displayHeight
+  // La distancia entre puertas no se escribe: sale de la escala que da la referencia.
+  const scale = useMemo(() => metersPerUnit(reference, aspect), [reference, aspect])
+  const distances = useMemo(() => gateDistances(gates, scale, aspect), [gates, scale, aspect])
+  const placingGates = step === 'gates' && scale !== null
+
   // Los cruces se calculan con el análisis completo (no a medias) y se recalculan al mover
-  // las puertas, cambiar distancias o marcar cruces a mano.
+  // las puertas o la referencia, o al marcar cruces a mano.
   const done = analysis.state.status === 'done' ? analysis.state.analysis : null
   const track = useMemo(() => (done ? torsoTrack(done.frames) : null), [done])
   const course = useMemo(
-    () =>
-      track
-        ? computeCourse(track, gates, distances, manual, { aspect: video.displayWidth / video.displayHeight })
-        : null,
-    [track, gates, distances, manual, video.displayWidth, video.displayHeight],
+    () => (track && placingGates ? computeCourse(track, gates, distances, manual, { aspect }) : null),
+    [track, placingGates, gates, distances, manual, aspect],
   )
 
   // Aviso en el visor si en este frame (o justo después) se cruza una puerta.
@@ -155,19 +166,35 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
       .join(' ') || null
 
   // Al añadir o quitar puertas cambian los índices: los cruces manuales dejan de valer.
-  function onAddGate() {
-    const next = addGate(gates, distances)
-    setGates(next.gates)
-    setDistances(next.distances)
+  function changeGateCount(next: Gate[]) {
+    setGates(next)
     setManual(new Map())
   }
 
-  function onRemoveGate(index: number) {
-    const next = removeGate(gates, distances, index)
-    setGates(next.gates)
-    setDistances(next.distances)
-    setManual(new Map())
+  function moveReferenceBars(bars: Gate[]) {
+    setReference((r) => ({ ...r, bars: [bars[0] ?? r.bars[0], bars[1] ?? r.bars[1]] }))
   }
+
+  const overlay = (
+    <>
+      <GateLayer
+        label="Referencia"
+        variant="reference"
+        gates={reference.bars}
+        labels={['A', 'B']}
+        spanLabels={[reference.distanceM === null ? '? m' : formatMeters(reference.distanceM)]}
+        onChange={placingGates ? undefined : moveReferenceBars}
+      />
+      {placingGates && (
+        <GateLayer
+          label="Puertas"
+          gates={gates}
+          spanLabels={distances.map((d) => (d === null ? null : formatMeters(d)))}
+          onChange={setGates}
+        />
+      )}
+    </>
+  )
 
   function setManualPair(gateIndex: number, pair: ManualPair | null) {
     setManual((previous) => {
@@ -195,29 +222,41 @@ function LoadedVideo({ file, video, frames }: LoadedVideoProps) {
         frameNote={frameNote}
         poses={analysis.poses}
         torso={torso}
-        gates={gates}
-        onGatesChange={setGates}
+        overlay={overlay}
       />
-      <GatesPanel
-        gates={gates}
-        distances={distances}
-        onAdd={onAddGate}
-        onRemove={onRemoveGate}
-        onDistanceChange={(index, value) => setDistances((d) => d.map((v, i) => (i === index ? value : v)))}
+      <ReferencePanel
+        reference={reference}
+        scale={scale}
+        editing={!placingGates}
+        onDistanceChange={(distanceM) => setReference((r) => ({ ...r, distanceM }))}
+        onDone={() => setStep('gates')}
+        onEdit={() => setStep('reference')}
       />
-      <ResultsPanel
-        course={course}
-        gates={gates}
-        distances={distances}
-        fps={video.timing.fps}
-        currentFrame={frameIndex}
-        onGoToFrame={(frame) => {
-          setFrameIndex(frame)
-          document.querySelector('.viewer')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        }}
-        onMarkHere={(gateIndex) => setManualPair(gateIndex, { beforeFrame: frameIndex - 1, afterFrame: frameIndex })}
-        onAutomatic={(gateIndex) => setManualPair(gateIndex, null)}
-      />
+      {placingGates && (
+        <GatesPanel
+          gates={gates}
+          distances={distances}
+          extrapolation={extrapolationFactor(distances, reference)}
+          onAdd={() => changeGateCount(addGate(gates))}
+          onRemove={(index) => changeGateCount(removeGate(gates, index))}
+          onUseReference={() => changeGateCount(reference.bars.map((bar) => ({ a: { ...bar.a }, b: { ...bar.b } })))}
+        />
+      )}
+      {placingGates && (
+        <ResultsPanel
+          course={course}
+          gates={gates}
+          distances={distances}
+          fps={video.timing.fps}
+          currentFrame={frameIndex}
+          onGoToFrame={(frame) => {
+            setFrameIndex(frame)
+            document.querySelector('.viewer')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }}
+          onMarkHere={(gateIndex) => setManualPair(gateIndex, { beforeFrame: frameIndex - 1, afterFrame: frameIndex })}
+          onAutomatic={(gateIndex) => setManualPair(gateIndex, null)}
+        />
+      )}
     </>
   )
 }

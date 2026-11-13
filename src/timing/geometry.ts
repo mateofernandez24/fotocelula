@@ -44,3 +44,22 @@ export function signedDistance(gate: Gate, point: Point, aspect: number): number
   const py = point.y - gate.a.y
   return (dy * px - dx * py) / Math.hypot(dx, dy)
 }
+
+/** Punto medio de una puerta. */
+export function gateMidpoint(gate: Gate): Point {
+  return { x: (gate.a.x + gate.b.x) / 2, y: (gate.a.y + gate.b.y) / 2 }
+}
+
+/**
+ * Separación entre dos puertas (o dos barras), en altos de imagen: media de la distancia
+ * perpendicular del centro de cada una a la recta de la otra. Con barras paralelas es la
+ * distancia entre ellas; no depende de lo largas que sean ni de su altura en la imagen, y
+ * vale igual para barras verticales (una distancia horizontal) que horizontales (una altura).
+ * NaN si alguna de las dos no es válida.
+ */
+export function gateSeparation(first: Gate, second: Gate, aspect: number): number {
+  if (!isValidGate(first, aspect) || !isValidGate(second, aspect)) return Number.NaN
+  const d1 = Math.abs(signedDistance(first, gateMidpoint(second), aspect))
+  const d2 = Math.abs(signedDistance(second, gateMidpoint(first), aspect))
+  return (d1 + d2) / 2
+}

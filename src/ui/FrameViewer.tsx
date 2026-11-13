@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import type { Gate } from '../timing/geometry.ts'
+import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import type { PoseFrame, TorsoPoint } from '../timing/torso.ts'
 import { drawRotatedFrame } from '../video/drawFrame.ts'
 import type { FrameSource } from '../video/frameSource.ts'
 import { formatInteger, formatSeconds } from './format.ts'
-import { GateLayer } from './GateLayer.tsx'
 import { drawPoseOverlay } from './poseOverlay.ts'
 
 /** Lado mayor del canvas: suficiente para ver detalle sin gastar memoria con vídeos 4K. */
@@ -24,9 +22,8 @@ interface FrameViewerProps {
   poses?: readonly (PoseFrame | undefined)[]
   /** Punto del torso de cada frame (null sin torso, undefined sin analizar). */
   torso?: readonly (TorsoPoint | null | undefined)[]
-  /** Puertas que se dibujan y se pueden arrastrar sobre el frame. */
-  gates?: readonly Gate[]
-  onGatesChange?: (gates: Gate[]) => void
+  /** Capas que se superponen al frame (puertas, referencia), del mismo tamaño que la imagen. */
+  overlay?: ReactNode
 }
 
 export function FrameViewer({
@@ -36,8 +33,7 @@ export function FrameViewer({
   frameNote = null,
   poses = NONE,
   torso = NONE,
-  gates = NONE,
-  onGatesChange,
+  overlay,
 }: FrameViewerProps) {
   const { video } = source
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -110,7 +106,7 @@ export function FrameViewer({
             aria-label={`Frame ${index + 1} del vídeo`}
           />
           <canvas ref={overlayRef} width={canvasWidth} height={canvasHeight} className="overlay" aria-hidden="true" />
-          {onGatesChange && <GateLayer gates={gates} onChange={onGatesChange} />}
+          {overlay}
         </div>
       </div>
       {error && <p className="error">{error}</p>}

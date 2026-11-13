@@ -10,6 +10,7 @@
   --fail: #c0362c;
   --warn: #b7791f;
   --gate: #ffd60a;
+  --ref: #4cc9f0;
 
   font: 16px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color-scheme: light dark;
@@ -155,8 +156,17 @@ h2 {
   pointer-events: none;
 }
 
+.gate-layer.reference {
+  --bar: var(--ref);
+}
+
+/* Capa que solo se ve (la referencia mientras se colocan las puertas). */
+.gate-layer.passive {
+  opacity: 0.6;
+}
+
 .gate-line {
-  stroke: var(--gate);
+  stroke: var(--bar, var(--gate));
   stroke-width: 3;
   stroke-linecap: round;
   filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
@@ -176,13 +186,30 @@ h2 {
 }
 
 .gate-handle {
-  fill: var(--gate);
+  fill: var(--bar, var(--gate));
   stroke: #000;
   stroke-width: 1.5;
 }
 
+.gate-span {
+  stroke: var(--bar, var(--gate));
+  stroke-width: 1.5;
+  stroke-dasharray: 6 5;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}
+
+.gate-span-label {
+  fill: var(--bar, var(--gate));
+  font-weight: 700;
+  font-size: 14px;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.8);
+  stroke-width: 3px;
+}
+
 .gate-label {
-  fill: var(--gate);
+  fill: var(--bar, var(--gate));
   font-weight: 700;
   font-size: 16px;
   text-anchor: middle;
@@ -225,15 +252,51 @@ h2 {
   margin: 0 0 4px 12px;
   padding: 4px 0 8px 22px;
   border-left: 2px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
-.distance-row label {
+.distance-row strong {
+  color: var(--text-h);
+}
+
+.reference-field {
+  margin: 0 0 12px;
+}
+
+.reference-field label {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   font-size: 0.9rem;
   color: var(--muted);
+}
+
+.step-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.step-summary h2 {
+  margin: 0;
+}
+
+.warning-text {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-left: 4px solid var(--warn);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.9rem;
 }
 
 .distance-input {

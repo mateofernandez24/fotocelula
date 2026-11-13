@@ -106,7 +106,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
       </ul>
       <p className="note">
         Vídeo a {formatFps(fps)}. El margen tiene en cuenta los frames y el temblor del punto del torso;
-        no incluye errores por perspectiva ni por colocar mal las puertas.
+        no incluye errores por perspectiva ni por colocar mal la referencia o las puertas.
       </p>
     </section>
   )
@@ -151,7 +151,7 @@ function describeProblem(course: CourseResult, distances: readonly (number | nul
     return 'Los cruces no siguen el orden de las puertas. Revisa dónde están las puertas o ajusta los cruces a mano.'
   }
   if (distances.some((d) => d === null)) {
-    return 'Escribe la distancia entre las puertas para calcular la velocidad.'
+    return 'Hay puertas demasiado juntas para calcular la distancia entre ellas: sepáralas.'
   }
   return 'No se puede calcular el resultado con estos cruces.'
 }
