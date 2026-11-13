@@ -12,6 +12,19 @@ const SLOW_MOTION_REASONS: Record<SlowMotionHint, string> = {
   'edit-rate': 'cambia de velocidad durante la reproducción',
 }
 
+/**
+ * Vídeo del iPhone que probablemente ha convertido iOS al importarlo desde Fotos en Safari:
+ * llega en H.264 a 30 fps constantes aunque el original fuera HEVC a 60 fps (observado con
+ * un iPhone 14 Plus). Los originales del iPhone suelen ser HEVC; en H.264 a 30 fps solo
+ * salen si se graba en «Más compatible» a 30 fps.
+ */
+export function looksConvertedByIos(video: Pick<DemuxedVideo, 'codec' | 'device' | 'timing'>): boolean {
+  const apple = video.device.make?.toLowerCase().includes('apple') ?? false
+  const h264 = /^avc[13]\./.test(video.codec)
+  const nominal = video.timing.nominalFps
+  return apple && h264 && nominal !== null && Math.round(nominal) === 30
+}
+
 export interface VideoWarning {
   severity: 'error' | 'warning' | 'info'
   text: string
@@ -21,7 +34,7 @@ export interface VideoWarning {
 export function videoWarnings(
   video: Pick<
     DemuxedVideo,
-    'timing' | 'slowMotionHints' | 'displayWidth' | 'displayHeight' | 'multipleEditSegments'
+    'timing' | 'slowMotionHints' | 'displayWidth' | 'displayHeight' | 'multipleEditSegments' | 'codec' | 'device'
   >,
 ): VideoWarning[] {
   const warnings: VideoWarning[] = []
@@ -42,7 +55,15 @@ export function videoWarnings(
       text: 'El vídeo está editado en varios tramos; solo se usa el primero.',
     })
   }
-  if (timing.fps < MIN_RECOMMENDED_FPS) {
+  if (looksConvertedByIos(video)) {
+    warnings.push({
+      severity: 'warning',
+      text:
+        'Vídeo del iPhone en H.264 a 30 fps: si lo grabaste a 60 fps, iOS lo ha convertido al importarlo ' +
+        'desde Fotos y ha perdido la mitad de los frames. Para medir con 60 fps, grábalo desde la app ' +
+        '(«Grabar vídeo») o prueba a guardarlo en Archivos e importarlo desde ahí.',
+    })
+  } else if (timing.fps < MIN_RECOMMENDED_FPS) {
     warnings.push({
       severity: 'warning',
       text: `Con ${formatFps(timing.fps)} el margen de error es mayor. Para medir con precisión graba a 60 fps.`,

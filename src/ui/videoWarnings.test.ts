@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { frameTimingStats } from '../video/fps.ts'
-import { videoWarnings } from './videoWarnings.ts'
+import { looksConvertedByIos, videoWarnings } from './videoWarnings.ts'
 
 function video(timestamps: number[], overrides: Partial<Parameters<typeof videoWarnings>[0]> = {}) {
   return {
@@ -9,6 +9,8 @@ function video(timestamps: number[], overrides: Partial<Parameters<typeof videoW
     displayWidth: 1080,
     displayHeight: 1920,
     multipleEditSegments: false,
+    codec: 'hvc1.1.6.L123.b0',
+    device: { make: null, model: null, software: null },
     ...overrides,
   }
 }
@@ -44,5 +46,31 @@ describe('videoWarnings', () => {
     const warnings = videoWarnings(video(at60, { displayWidth: 2160, displayHeight: 3840 }))
     expect(warnings).toHaveLength(1)
     expect(warnings[0]?.severity).toBe('info')
+  })
+
+  describe('vídeo convertido por iOS al importarlo', () => {
+    const at30 = Array.from({ length: 60 }, (_, i) => i / 30)
+    const iphone = { make: 'Apple', model: 'iPhone 14 Plus', software: '18.1' }
+
+    it('iPhone + H.264 + 30 fps: aviso específico en lugar del de pocos fps', () => {
+      const warnings = videoWarnings(video(at30, { codec: 'avc1.640033', device: iphone }))
+      expect(warnings).toHaveLength(1)
+      expect(warnings[0]?.severity).toBe('warning')
+      expect(warnings[0]?.text).toContain('iOS lo ha convertido')
+      expect(warnings[0]?.text).toContain('Grabar vídeo')
+    })
+
+    it('no avisa con un original del iPhone en HEVC a 30 fps, ni a 60 fps, ni sin metadatos de Apple', () => {
+      expect(looksConvertedByIos(video(at30, { device: iphone }))).toBe(false)
+      expect(looksConvertedByIos(video(at60, { codec: 'avc1.640033', device: iphone }))).toBe(false)
+      expect(looksConvertedByIos(video(at30, { codec: 'avc1.640033' }))).toBe(false)
+      // Sin metadatos de Apple queda el aviso genérico de pocos fps.
+      expect(videoWarnings(video(at30, { codec: 'avc1.640033' }))[0]?.text).toContain('30,00 fps')
+    })
+
+    it('también a 29,97 fps', () => {
+      const at2997 = Array.from({ length: 60 }, (_, i) => (i * 1001) / 30000)
+      expect(looksConvertedByIos(video(at2997, { codec: 'avc1.4d0028', device: iphone }))).toBe(true)
+    })
   })
 })
