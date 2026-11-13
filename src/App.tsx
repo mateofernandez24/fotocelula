@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Diagnostics } from './ui/Diagnostics.tsx'
+import { EmptyState } from './ui/EmptyState.tsx'
 import { FlagIcon, HistoryIcon, LogoIcon, SettingsIcon, StopwatchIcon } from './ui/icons.tsx'
 import { VideoAnalyzer } from './ui/VideoAnalyzer.tsx'
 
@@ -15,6 +16,11 @@ const VIEWS: { id: View; label: string; icon: ReactNode }[] = [
 function App() {
   const [view, setView] = useState<View>('measure')
 
+  function show(next: View) {
+    setView(next)
+    window.scrollTo({ top: 0 })
+  }
+
   return (
     <>
       <main>
@@ -27,16 +33,15 @@ function App() {
             <p>Tiempo y velocidad con la cámara del móvil</p>
           </div>
         </header>
-        {/* Medir se oculta en vez de desmontarse para no perder el vídeo cargado. */}
-        <div hidden={view !== 'measure'}>
-          <VideoAnalyzer />
+        {/* Medir y Resultado son dos vistas del mismo vídeo: se oculta en vez de desmontarse
+            para no perder el vídeo cargado ni el análisis. */}
+        <div hidden={view !== 'measure' && view !== 'result'}>
+          <VideoAnalyzer
+            view={view === 'result' ? 'result' : 'measure'}
+            onShowResult={() => show('result')}
+            onShowMeasure={() => show('measure')}
+          />
         </div>
-        {view === 'result' && (
-          <EmptyState icon={<FlagIcon />} title="Resultado">
-            Aquí verás la repetición con la velocidad en cada puerta. De momento, el resultado aparece en el
-            último paso de <strong>Medir</strong> (Puertas).
-          </EmptyState>
-        )}
         {view === 'history' && (
           <EmptyState icon={<HistoryIcon />} title="Historial">
             Aún no hay mediciones guardadas. Pronto podrás guardar cada medición y compararlas.
@@ -56,10 +61,7 @@ function App() {
               key={id}
               type="button"
               aria-current={view === id ? 'page' : undefined}
-              onClick={() => {
-                setView(id)
-                window.scrollTo({ top: 0 })
-              }}
+              onClick={() => show(id)}
             >
               {icon}
               {label}
@@ -68,16 +70,6 @@ function App() {
         </div>
       </nav>
     </>
-  )
-}
-
-function EmptyState({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
-  return (
-    <section className="card empty-state">
-      {icon}
-      <h2>{title}</h2>
-      <p>{children}</p>
-    </section>
   )
 }
 

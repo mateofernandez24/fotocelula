@@ -44,17 +44,21 @@ interface StepNavProps {
   onSelect: (step: StepId) => void
   /** Por qué no se puede seguir todavía (se muestra si «Siguiente» está desactivado). */
   blockedReason?: string | null
+  /** Botón del último paso (p. ej. «Ver resultado»). */
+  finish?: { label: string; disabled: boolean; onClick: () => void } | undefined
 }
 
 /** Atrás / Siguiente, al final del paso. */
-export function StepNav({ current, reachable, onSelect, blockedReason = null }: StepNavProps) {
+export function StepNav({ current, reachable, onSelect, blockedReason = null, finish }: StepNavProps) {
   const index = stepIndex(current)
   const previous = STEPS[index - 1]
   const next = STEPS[index + 1]
   const canGoNext = next !== undefined && stepIndex(next.id) <= stepIndex(reachable)
   return (
     <div className="step-nav">
-      {next && !canGoNext && blockedReason && <p className="step-nav-hint">{blockedReason}</p>}
+      {((next && !canGoNext) || (!next && finish?.disabled)) && blockedReason && (
+        <p className="step-nav-hint">{blockedReason}</p>
+      )}
       <div className="step-nav-buttons">
         <button type="button" className="secondary" disabled={!previous} onClick={() => previous && onSelect(previous.id)}>
           Atrás
@@ -62,6 +66,11 @@ export function StepNav({ current, reachable, onSelect, blockedReason = null }: 
         {next && (
           <button type="button" disabled={!canGoNext} onClick={() => onSelect(next.id)}>
             Siguiente: {next.label}
+          </button>
+        )}
+        {!next && finish && (
+          <button type="button" disabled={finish.disabled} onClick={finish.onClick}>
+            {finish.label}
           </button>
         )}
       </div>

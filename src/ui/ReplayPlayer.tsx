@@ -58,6 +58,8 @@ export function ReplayPlayer({ source, poses, torso, gates, course, speeds, inde
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const controllerRef = useRef<AbortController | null>(null)
+  // Último frame mostrado por el bucle de reproducción.
+  const loopIndexRef = useRef<number | null>(null)
   const [playing, setPlaying] = useState(false)
   const [slowMotion, setSlowMotion] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -120,6 +122,16 @@ export function ReplayPlayer({ source, poses, torso, gates, course, speeds, inde
   // Al salir, se para la reproducción.
   useEffect(() => () => controllerRef.current?.abort(), [])
 
+  // Si otro control cambia el frame mientras se reproduce (p. ej. «Ver» un cruce), se pausa
+  // para mostrar ese frame.
+  useEffect(() => {
+    if (controllerRef.current && loopIndexRef.current !== null && index !== loopIndexRef.current) {
+      controllerRef.current.abort()
+      controllerRef.current = null
+      setPlaying(false)
+    }
+  }, [index])
+
   function pause() {
     controllerRef.current?.abort()
     controllerRef.current = null
@@ -147,6 +159,7 @@ export function ReplayPlayer({ source, poses, torso, gates, course, speeds, inde
           const ctx = canvasRef.current?.getContext('2d')
           if (ctx) drawRotatedFrame(ctx, frame, video.rotation)
           drawOverlay(entry.index)
+          loopIndexRef.current = entry.index
           onIndexChange(entry.index)
         },
         { from, signal: controller.signal },
@@ -246,9 +259,7 @@ function PassageBadge({ passage, count }: { passage: GatePassage; count: number 
       <span className="hud-badge-title">
         {title} · puerta {passage.gateIndex + 1}
       </span>
-      {isStart ? (
-        <span className="hud-badge-main">¡En marcha!</span>
-      ) : result ? (
+      {isStart ? null : result ? (
         <>
           <span className="hud-badge-main">{twoDecimals.format(result.speedMs)} m/s</span>
           <span className="hud-badge-sub">

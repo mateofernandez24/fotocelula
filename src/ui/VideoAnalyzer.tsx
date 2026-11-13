@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { computeCourse, type ManualPair } from '../timing/course.ts'
 import { gateNormal, type Gate } from '../timing/geometry.ts'
 import { instantSpeeds } from '../timing/instantSpeed.ts'
@@ -6,7 +6,9 @@ import { extrapolationFactor, gateDistances, metersPerUnit, type ScaleReference 
 import { torsoPoint, torsoTrack } from '../timing/torso.ts'
 import { blobByteSource, demuxVideo, VideoFormatError, type DemuxedVideo } from '../video/demux.ts'
 import { FrameSource } from '../video/frameSource.ts'
+import { EmptyState } from './EmptyState.tsx'
 import { FrameViewer } from './FrameViewer.tsx'
+import { FlagIcon } from './icons.tsx'
 import { formatMeters } from './format.ts'
 import { GateLayer } from './GateLayer.tsx'
 import { addGate, defaultGates, defaultReferenceBars, removeGate } from './gates.ts'
@@ -45,7 +47,16 @@ function errorMessage(error: unknown): string {
   return `No se ha podido leer el vídeo${detail}.`
 }
 
-export function VideoAnalyzer() {
+export type AnalyzerView = 'measure' | 'result'
+
+interface VideoAnalyzerProps {
+  /** Medir (pasos) o Resultado (repetición y tiempos) del mismo vídeo. */
+  view: AnalyzerView
+  onShowResult: () => void
+  onShowMeasure: () => void
+}
+
+export function VideoAnalyzer({ view, onShowResult, onShowMeasure }: VideoAnalyzerProps) {
   const [state, setState] = useState<State>({ status: 'empty' })
   const [recording, setRecording] = useState(false)
   // Paso de «Medir» y último paso al que se puede ir (lo decide el vídeo cargado).
@@ -118,11 +129,15 @@ export function VideoAnalyzer() {
     if (file) void load(file)
   }
 
+  const measuring = view === 'measure'
+
   return (
     <>
-      <Stepper current={current} reachable={ready ? reachable : 'video'} disabled={recording} onSelect={goTo} />
+      {measuring && (
+        <Stepper current={current} reachable={ready ? reachable : 'video'} disabled={recording} onSelect={goTo} />
+      )}
 
-      {current === 'video' && (
+      {measuring && current === 'video' && (
         <section className="card">
           <h2>Vídeo</h2>
           <p className="note">
@@ -159,7 +174,14 @@ export function VideoAnalyzer() {
         </section>
       )}
 
-      {recording && (
+      {!measuring && !ready && (
+        <ResultEmpty onShowMeasure={onShowMeasure}>
+          Importa o graba un vídeo en <strong>Medir</strong> y sigue los pasos: aquí verás la repetición con
+          el tiempo y la velocidad en cada puerta.
+        </ResultEmpty>
+      )}
+
+      {measuring && recording && (
         <Recorder
           onRecorded={(file) => {
             setRecording(false)
@@ -172,7 +194,7 @@ export function VideoAnalyzer() {
       {/* Mientras se graba, el vídeo anterior se oculta pero no se pierde (por si se cancela). */}
       {state.status === 'ready' && (
         <div hidden={recording}>
-          {current === 'video' && (
+          {measuring && current === 'video' && (
             <VideoInfo fileName={state.fileName} video={state.video}>
               {state.recorded && (
                 <RecordingSave file={state.file} saved={unsaved !== state.file} onSaved={() => setUnsaved(null)} />
@@ -185,13 +207,19 @@ export function VideoAnalyzer() {
               file={state.file}
               video={state.video}
               frames={state.frames}
+              view={view}
               step={current}
               reachable={reachable}
               onReachableChange={setReachable}
               onStepChange={goTo}
+              onShowResult={onShowResult}
+              onShowMeasure={(step) => {
+                setStep(step)
+                onShowMeasure()
+              }}
             />
           ) : (
-            <section className="card">
+            measuring && <section className="card">
               <h2>Frames</h2>
               <p className="error">{state.decodeError}</p>
             </section>
@@ -224,18 +252,50 @@ function RecordingSave({ file, saved, onSaved }: { file: File; saved: boolean; o
   )
 }
 
+/** Resultado sin datos todavía: qué falta y un botón para volver a Medir. */
+function ResultEmpty({ children, onShowMeasure }: { children: ReactNode; onShowMeasure: () => void }) {
+  return (
+    <EmptyState
+      icon={<FlagIcon />}
+      title="Resultado"
+      action={
+        <button type="button" onClick={onShowMeasure}>
+          Ir a Medir
+        </button>
+      }
+    >
+      {children}
+    </EmptyState>
+  )
+}
+
 interface LoadedVideoProps {
   file: File
   video: DemuxedVideo
   frames: FrameSource
+  view: AnalyzerView
   step: StepId
   reachable: StepId
   onReachableChange: (step: StepId) => void
   onStepChange: (step: StepId) => void
+  onShowResult: () => void
+  /** Vuelve a Medir, al paso indicado. */
+  onShowMeasure: (step: StepId) => void
 }
 
 /** Análisis de movimiento y visor de un vídeo ya cargado (uno por vídeo: se reinicia al cambiar). */
-function LoadedVideo({ file, video, frames, step, reachable, onReachableChange, onStepChange }: LoadedVideoProps) {
+function LoadedVideo({
+  file,
+  video,
+  frames,
+  view,
+  step,
+  reachable,
+  onReachableChange,
+  onStepChange,
+  onShowResult,
+  onShowMeasure,
+}: LoadedVideoProps) {
   const analysis = usePoseAnalysis(file, video.frames.length)
   // null: sin torso en ese frame; undefined: aún sin analizar.
   const torso = useMemo(
@@ -270,15 +330,17 @@ function LoadedVideo({ file, video, frames, step, reachable, onReachableChange, 
         ? reference.distanceM === null
           ? 'Escribe la distancia de la referencia para continuar.'
           : 'Separa las barras de la referencia para continuar.'
-        : null
+        : step === 'gates' && analysis.state.status !== 'done'
+          ? 'Espera a que termine el análisis del movimiento para ver el resultado.'
+          : null
 
   // Los cruces se calculan con el análisis completo (no a medias) y se recalculan al mover
   // las puertas o la referencia, o al marcar cruces a mano.
   const done = analysis.state.status === 'done' ? analysis.state.analysis : null
   const track = useMemo(() => (done ? torsoTrack(done.frames) : null), [done])
   const course = useMemo(
-    () => (track && placingGates ? computeCourse(track, gates, distances, manual, { aspect }) : null),
-    [track, placingGates, gates, distances, manual, aspect],
+    () => (track && scale !== null ? computeCourse(track, gates, distances, manual, { aspect }) : null),
+    [track, scale, gates, distances, manual, aspect],
   )
 
   // Velocidad instantánea aproximada (para el marcador de la repetición), solo en la
@@ -294,7 +356,7 @@ function LoadedVideo({ file, video, frames, step, reachable, onReachableChange, 
 
   // Aviso en el visor si en este frame (o justo después) se cruza una puerta.
   const frameNote =
-    course?.gates
+    (placingGates ? course : null)?.gates
       .map(({ crossing }, i) =>
         crossing && (frameIndex === crossing.beforeFrame || frameIndex === crossing.afterFrame)
           ? `Puerta ${i + 1}: el torso la cruza entre los frames ${crossing.beforeFrame + 1} y ${crossing.afterFrame + 1}.`
@@ -345,6 +407,52 @@ function LoadedVideo({ file, video, frames, step, reachable, onReachableChange, 
     })
   }
 
+  if (view === 'result') {
+    if (!course || !speeds) {
+      return (
+        <ResultEmpty onShowMeasure={() => onShowMeasure(analysisStarted ? (scale === null ? 'reference' : 'gates') : 'motion')}>
+          {!analysisStarted
+            ? 'Analiza el movimiento en Medir (paso 2) para ver el resultado.'
+            : !done
+              ? 'El análisis del movimiento aún no ha terminado.'
+              : 'Coloca la referencia y escribe su distancia en Medir (paso 3).'}
+        </ResultEmpty>
+      )
+    }
+    return (
+      <>
+        <ReplayPlayer
+          source={frames}
+          poses={analysis.poses}
+          torso={torso}
+          gates={gates}
+          course={course}
+          speeds={speeds}
+          index={replayIndex}
+          onIndexChange={setReplayIndex}
+        />
+        <ResultsPanel
+          course={course}
+          gates={gates}
+          distances={distances}
+          fps={video.timing.fps}
+          currentFrame={replayIndex}
+          onGoToFrame={(frame) => {
+            setReplayIndex(frame)
+            document.querySelector('.replay')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }}
+          onMarkHere={(gateIndex) => setManualPair(gateIndex, { beforeFrame: replayIndex - 1, afterFrame: replayIndex })}
+          onAutomatic={(gateIndex) => setManualPair(gateIndex, null)}
+        />
+        <div className="buttons result-actions">
+          <button type="button" className="secondary" onClick={() => onShowMeasure('gates')}>
+            Ajustar puertas
+          </button>
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
       <FrameViewer
@@ -383,34 +491,13 @@ function LoadedVideo({ file, video, frames, step, reachable, onReachableChange, 
           onUseReference={() => changeGateCount(reference.bars.map((bar) => ({ a: { ...bar.a }, b: { ...bar.b } })))}
         />
       )}
-      {placingGates && course && speeds && (
-        <ReplayPlayer
-          source={frames}
-          poses={analysis.poses}
-          torso={torso}
-          gates={gates}
-          course={course}
-          speeds={speeds}
-          index={replayIndex}
-          onIndexChange={setReplayIndex}
-        />
-      )}
-      {placingGates && (
-        <ResultsPanel
-          course={course}
-          gates={gates}
-          distances={distances}
-          fps={video.timing.fps}
-          currentFrame={frameIndex}
-          onGoToFrame={(frame) => {
-            setFrameIndex(frame)
-            document.querySelector('.viewer')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          }}
-          onMarkHere={(gateIndex) => setManualPair(gateIndex, { beforeFrame: frameIndex - 1, afterFrame: frameIndex })}
-          onAutomatic={(gateIndex) => setManualPair(gateIndex, null)}
-        />
-      )}
-      <StepNav current={step} reachable={reachable} onSelect={onStepChange} blockedReason={blockedReason} />
+      <StepNav
+        current={step}
+        reachable={reachable}
+        onSelect={onStepChange}
+        blockedReason={blockedReason}
+        finish={{ label: 'Ver resultado', disabled: !course, onClick: onShowResult }}
+      />
     </>
   )
 }

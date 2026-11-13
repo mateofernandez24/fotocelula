@@ -389,6 +389,11 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
+.result-actions {
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
 .empty-state {
   display: grid;
   justify-items: center;
