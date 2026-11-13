@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { PoseBenchmark } from './PoseBenchmark.tsx'
+import { RecordingTest } from './RecordingTest.tsx'
 
 interface Check {
   label: string
@@ -203,6 +204,7 @@ function CameraTest() {
           <dd>{formatFps(measuredFps)}</dd>
         </dl>
       )}
+      {stream && <RecordingTest stream={stream} />}
     </section>
   )
 }

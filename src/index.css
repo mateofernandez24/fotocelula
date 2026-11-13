@@ -620,6 +620,18 @@ button:disabled {
   display: none;
 }
 
+.recording-test {
+  margin-top: 16px;
+}
+
+.recording-test .stats {
+  margin-bottom: 12px;
+}
+
+.recording-test .stats dd {
+  overflow-wrap: anywhere;
+}
+
 .stats {
   display: grid;
   grid-template-columns: 1fr auto;
