@@ -620,13 +620,72 @@ button:disabled {
   display: none;
 }
 
+/* El escenario se ajusta al vídeo para que la cuadrícula coincida con la imagen. */
 .recorder-stage {
   position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.recorder-stage[hidden] {
+  display: none;
 }
 
 .recorder .preview {
+  width: auto;
+  max-width: 100%;
   max-height: 65vh;
-  object-fit: contain;
+  margin-top: 0;
+}
+
+/* Tercios y línea central (amarilla), para alinear la cámara con el suelo y el recorrido. */
+.camera-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 8px;
+  background:
+    linear-gradient(to right, transparent calc(100% / 3 - 0.5px), rgba(255, 255, 255, 0.45) calc(100% / 3 - 0.5px), rgba(255, 255, 255, 0.45) calc(100% / 3 + 0.5px), transparent calc(100% / 3 + 0.5px)),
+    linear-gradient(to right, transparent calc(200% / 3 - 0.5px), rgba(255, 255, 255, 0.45) calc(200% / 3 - 0.5px), rgba(255, 255, 255, 0.45) calc(200% / 3 + 0.5px), transparent calc(200% / 3 + 0.5px)),
+    linear-gradient(to bottom, transparent calc(100% / 3 - 0.5px), rgba(255, 255, 255, 0.45) calc(100% / 3 - 0.5px), rgba(255, 255, 255, 0.45) calc(100% / 3 + 0.5px), transparent calc(100% / 3 + 0.5px)),
+    linear-gradient(to bottom, transparent calc(200% / 3 - 0.5px), rgba(255, 255, 255, 0.45) calc(200% / 3 - 0.5px), rgba(255, 255, 255, 0.45) calc(200% / 3 + 0.5px), transparent calc(200% / 3 + 0.5px)),
+    linear-gradient(to bottom, transparent calc(50% - 0.75px), rgba(255, 214, 10, 0.6) calc(50% - 0.75px), rgba(255, 214, 10, 0.6) calc(50% + 0.75px), transparent calc(50% + 0.75px));
+}
+
+.recorder-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.recorder-info .note {
+  margin: 0;
+}
+
+.tips {
+  margin-top: 16px;
+  font-size: 0.9rem;
+}
+
+.tips summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-h);
+  min-height: 32px;
+}
+
+.tips ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+}
+
+.tips li + li {
+  margin-top: 6px;
 }
 
 .recording-badge {
@@ -639,10 +698,6 @@ button:disabled {
   font-variant-numeric: tabular-nums;
   color: #fff;
   background: rgba(192, 54, 44, 0.9);
-}
-
-.recorder-info {
-  font-variant-numeric: tabular-nums;
 }
 
 /* Rojo fijo (no el de --fail, que en modo oscuro es claro y no contrasta con el texto blanco). */
