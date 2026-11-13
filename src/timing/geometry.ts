@@ -45,6 +45,17 @@ export function signedDistance(gate: Gate, point: Point, aspect: number): number
   return (dy * px - dx * py) / Math.hypot(dx, dy)
 }
 
+/**
+ * Dirección perpendicular a la puerta (vector unitario en altos de imagen): la dirección
+ * en la que se la cruza. Con una puerta vertical de arriba abajo apunta a la derecha.
+ */
+export function gateNormal(gate: Gate, aspect: number): Point {
+  const dx = (gate.b.x - gate.a.x) * aspect
+  const dy = gate.b.y - gate.a.y
+  const length = Math.hypot(dx, dy)
+  return length > 0 ? { x: dy / length, y: -dx / length } : { x: 1, y: 0 }
+}
+
 /** Punto medio de una puerta. */
 export function gateMidpoint(gate: Gate): Point {
   return { x: (gate.a.x + gate.b.x) / 2, y: (gate.a.y + gate.b.y) / 2 }

@@ -6,7 +6,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { PoseDataFile } from '../pose/poseExport.ts'
 import { findCrossings, manualCrossing } from './crossing.ts'
-import type { Gate } from './geometry.ts'
+import { gateNormal, gateSeparation, type Gate } from './geometry.ts'
+import { instantSpeeds } from './instantSpeed.ts'
 import { computeRunResults } from './results.ts'
 import { torsoTrack } from './torso.ts'
 
@@ -87,6 +88,25 @@ describe('referencias de test-data', () => {
       // Margen combinado de la medida y de la referencia (la referencia también es una medida).
       const tolerance = Math.hypot(result?.speedUncertaintyMs ?? 0, referenceResult?.speedUncertaintyMs ?? 0)
       expect(speedError).toBeLessThanOrEqual(tolerance)
+    })
+
+    it('la velocidad instantánea, de media entre las puertas, se parece a la media medida', () => {
+      const first = reference.gates[0]
+      const last = reference.gates.at(-1)
+      const start = detected[0]
+      const end = detected.at(-1)
+      if (!first || !last || !start || !end) throw new Error('faltan puertas o cruces')
+      // Escala como la daría una referencia sobre las mismas puertas.
+      const scale = reference.distanceM / gateSeparation(first, last, aspect)
+      const speeds = instantSpeeds(track, { aspect, scale, axis: gateNormal(first, aspect) })
+      const between = speeds.filter(
+        (s, i): s is number =>
+          s !== null && (track[i]?.timestampS ?? -1) > start.timeS && (track[i]?.timestampS ?? Infinity) < end.timeS,
+      )
+      expect(between.length).toBeGreaterThan(10)
+      const mean = between.reduce((sum, s) => sum + s, 0) / between.length
+      const average = reference.distanceM / (end.timeS - start.timeS)
+      expect(Math.abs(mean - average) / average).toBeLessThan(0.1)
     })
   })
 })
